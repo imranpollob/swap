@@ -1,4 +1,4 @@
-export const FACTORY_ADDRESS = '0xb7f8bc63bbcad18155201308c8f3540b07f84f5e';
-export const ROUTER_ADDRESS = '0xa51c1fc2f0d1a1b8494ed1fe312d7c3a78ed91c0';
-export const WETH_ADDRESS = '0x610178da211fef7d417bc0e6fed39f05609ad788';
-export const TKA_ADDRESS = '0x0dcd1bf9a1b36ce34237eeafef220932846bcd82';
+export const FACTORY_ADDRESS = '0xe7f1725e7734ce288f8367e1bb143e90bb3f0512';
+export const ROUTER_ADDRESS = '0x9fe46736679d2d9a65f0992f2272de9f3c7fa6e0';
+export const WETH_ADDRESS = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
+export const TKA_ADDRESS = '0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9';

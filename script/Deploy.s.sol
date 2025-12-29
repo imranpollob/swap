@@ -29,7 +29,32 @@ contract DeployScript is Script {
         // Deploy a test token
         ERC20Mock tokenA = new ERC20Mock("Test Token A", "TKA", 18);
         console.log("TestTokenA deployed at:", address(tokenA));
-        tokenA.mint(msg.sender, 1000000 * 10 ** 18); // Mint some to deployer
+        tokenA.mint(msg.sender, 1_000_000 * 10 ** 18); // Mint TKA to deployer
+
+        // S E E D   L I Q U I D I T Y
+        // ---------------------------
+        uint256 amountETH = 100 * 10 ** 18;
+        uint256 amountToken = 5000 * 10 ** 18; // 1 ETH = 50 TKA
+
+        // 1. Wrap ETH
+        weth.deposit{value: amountETH}();
+
+        // 2. Approve Router
+        weth.approve(address(router), amountETH);
+        tokenA.approve(address(router), amountToken);
+
+        // 3. Add Liquidity
+        router.addLiquidity(
+            address(tokenA),
+            address(weth),
+            amountToken,
+            amountETH,
+            0,
+            0,
+            msg.sender,
+            block.timestamp + 1000
+        );
+        console.log("Liquidity Added: 100 WETH + 5000 TKA");
 
         vm.stopBroadcast();
     }
