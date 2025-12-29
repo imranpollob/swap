@@ -10,11 +10,14 @@ export function Navbar() {
           MiniSwap v2
         </h1>
         <div className="flex gap-4">
-          <Link href="/swap" className="hover:text-pink-400 transition-colors">
+          <Link href="/" className="hover:text-pink-400 transition-colors">
             Swap
           </Link>
           <Link href="/pool" className="hover:text-pink-400 transition-colors">
             Pool
+          </Link>
+          <Link href="/docs" className="hover:text-pink-400 transition-colors">
+            Docs
           </Link>
         </div>
       </div>

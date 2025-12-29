@@ -1,65 +1,129 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { parseEther, formatEther, type Address } from 'viem';
+import { ROUTER_ADDRESS, WETH_ADDRESS, FACTORY_ADDRESS, TKA_ADDRESS } from '@/lib/addresses';
+import ROUTER_ABI from '@/lib/abis/Router.json';
+import PAIR_ABI from '@/lib/abis/Pair.json';
+import FACTORY_ABI from '@/lib/abis/Factory.json';
+import ERC20_ABI from '@/lib/abis/ERC20.json';
+import { getAmountOut } from '@/lib/math';
+
+// Hardcoded tokens for MVP
+const TOKENS: { symbol: string; address: Address }[] = [
+  { symbol: 'WETH', address: WETH_ADDRESS as Address },
+  { symbol: 'TKA', address: TKA_ADDRESS as Address },
+];
+
+export default function SwapPage() {
+  const { address } = useAccount();
+  const [tokenIn, setTokenIn] = useState(TOKENS[0]);
+  const [tokenOut, setTokenOut] = useState(TOKENS[1]);
+  const [amountIn, setAmountIn] = useState('');
+  const [amountOut, setAmountOut] = useState('');
+
+  // 1. Get Pair Address
+  const { data: pairAddress } = useReadContract({
+    address: FACTORY_ADDRESS as Address,
+    abi: FACTORY_ABI as any,
+    functionName: 'getPair',
+    args: [tokenIn.address, tokenOut.address],
+  });
+
+  // 2. Get Reserves
+  const { data: reserves } = useReadContract({
+    address: pairAddress as Address,
+    abi: PAIR_ABI as any,
+    functionName: 'getReserves',
+    query: {
+      enabled: !!pairAddress && pairAddress !== '0x0000000000000000000000000000000000000000',
+    }
+  });
+
+  // 3. Get Amounts Out from Router
+  const { data: amountsOutData } = useReadContract({
+    address: ROUTER_ADDRESS as Address,
+    abi: ROUTER_ABI as any,
+    functionName: 'getAmountsOut',
+    args: [parseEther(amountIn || '0'), [tokenIn.address, tokenOut.address]],
+    query: {
+      enabled: !!amountIn && parseFloat(amountIn) > 0,
+    }
+  });
+
+
+  useEffect(() => {
+    if (amountsOutData) {
+      setAmountOut(formatEther((amountsOutData as bigint[])[1]));
+    } else {
+      setAmountOut('');
+    }
+  }, [amountsOutData]);
+
+  const { writeContract, data: hash, isPending } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const handleSwap = async () => {
+    if (!amountIn) return;
+
+    const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 mins
+    const amountInWei = parseEther(amountIn);
+    const amountOutMin = amountsOutData ? (amountsOutData as bigint[])[1] * 995n / 1000n : 0n; // 0.5% slippage
+
+    writeContract({
+      address: ROUTER_ADDRESS as Address,
+      abi: ROUTER_ABI as any,
+      functionName: 'swapExactTokensForTokens',
+      args: [
+        amountInWei,
+        amountOutMin,
+        [tokenIn.address, tokenOut.address],
+        address,
+        deadline
+      ]
+    });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="max-w-md mx-auto mt-10 p-6 bg-gray-900 rounded-xl border border-gray-800">
+      <h2 className="text-2xl font-bold mb-4">Swap</h2>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">From ({tokenIn.symbol})</label>
+          <input
+            type="number"
+            value={amountIn}
+            onChange={(e) => setAmountIn(e.target.value)}
+            className="w-full bg-gray-800 p-3 rounded border border-gray-700 focus:border-pink-500 outline-none"
+            placeholder="0.0"
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="flex justify-center text-gray-500">↓</div>
+
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">To ({tokenOut.symbol})</label>
+          <input
+            type="number"
+            value={amountOut}
+            readOnly
+            className="w-full bg-gray-800 p-3 rounded border border-gray-700 outline-none cursor-not-allowed"
+            placeholder="0.0"
+          />
         </div>
-      </main>
+
+        <button
+          onClick={handleSwap}
+          disabled={isPending || isConfirming || !amountIn}
+          className="w-full bg-pink-600 hover:bg-pink-700 p-4 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isPending ? 'Swapping...' : isConfirming ? 'Confirming...' : 'Swap'}
+        </button>
+
+        {isSuccess && <div className="text-green-500 text-center mt-2">Swap Successful!</div>}
+      </div>
     </div>
   );
 }

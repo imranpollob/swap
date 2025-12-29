@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther, type Address } from 'viem'; // Removed formatEther as it is unused currently
-import { ROUTER_ADDRESS, WETH_ADDRESS, FACTORY_ADDRESS } from '@/lib/addresses';
+import { ROUTER_ADDRESS, WETH_ADDRESS, FACTORY_ADDRESS, TKA_ADDRESS } from '@/lib/addresses';
 import ROUTER_ABI from '@/lib/abis/Router.json';
 import PAIR_ABI from '@/lib/abis/Pair.json';
 import FACTORY_ABI from '@/lib/abis/Factory.json';
@@ -11,7 +11,7 @@ import ERC20_ABI from '@/lib/abis/ERC20.json'; // unused but good to have
 
 const TOKENS = [
   { symbol: 'WETH', address: WETH_ADDRESS as Address },
-  { symbol: 'TKA', address: '0x0000000000000000000000000000000000000001' as Address }, // Mock placeholder
+  { symbol: 'TKA', address: TKA_ADDRESS as Address },
 ];
 
 export default function PoolPage() {
@@ -25,7 +25,7 @@ export default function PoolPage() {
   // Get Pair
   const { data: pairAddress } = useReadContract({
     address: FACTORY_ADDRESS as Address,
-    abi: FACTORY_ABI,
+    abi: FACTORY_ABI as any,
     functionName: 'getPair',
     args: [tokenA.address, tokenB.address],
   });
@@ -43,7 +43,7 @@ export default function PoolPage() {
 
     writeContract({
       address: ROUTER_ADDRESS as Address,
-      abi: ROUTER_ABI,
+      abi: ROUTER_ABI as any,
       functionName: 'addLiquidity',
       args: [
         tokenA.address,
