@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useBalance } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useBalance, useConnect } from 'wagmi';
 import { parseEther, formatEther, type Address } from 'viem';
 import { ROUTER_ADDRESS, WETH_ADDRESS, FACTORY_ADDRESS, TKA_ADDRESS } from '@/lib/addresses';
 import ROUTER_ABI from '@/lib/abis/Router.json';
@@ -19,6 +19,7 @@ type Token = typeof TOKENS[number];
 
 export default function SwapPage() {
   const { address, isConnected } = useAccount();
+  const { connectors, connect } = useConnect();
   const [tokenIn, setTokenIn] = useState<Token>(TOKENS[0]); // ETH
   const [tokenOut, setTokenOut] = useState<Token>(TOKENS[2]); // TKA
   const [amountIn, setAmountIn] = useState('');
@@ -78,6 +79,15 @@ export default function SwapPage() {
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   const handleSwap = async () => {
+    if (!isConnected) {
+      // Auto-connect to the first available connector (usually Injected/MetaMask)
+      const connector = connectors[0];
+      if (connector) {
+        connect({ connector });
+      }
+      return;
+    }
+
     if (!amountIn || !address) return;
 
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 60 * 20);
@@ -285,8 +295,11 @@ export default function SwapPage() {
         {/* Swap button */}
         <button
           onClick={handleSwap}
-          disabled={isPending || isConfirming || !amountIn || !isConnected}
-          className="w-full mt-4 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 p-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          disabled={isPending || isConfirming || (!amountIn && isConnected)}
+          className={`w-full mt-4 p-4 rounded-xl font-bold text-lg transition-all ${!isConnected
+              ? 'bg-blue-600 hover:bg-blue-700'
+              : 'bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed'
+            }`}
         >
           {!isConnected
             ? 'Connect Wallet'

@@ -68,6 +68,22 @@ forge test --gas-report
 forge test --match-path test/MarketConditions.t.sol -vvv
 ```
 
+### 4. Setup Browser Wallet (MetaMask)
+
+1.  **Install Wallet**: Install [MetaMask](https://metamask.io/) or [Rabby](https://rabby.io/) extension.
+2.  **Add Network**:
+    *   **Network Name**: Anvil Local
+    *   **RPC URL**: `http://127.0.0.1:8545`
+    *   **Chain ID**: `31337`
+    *   **Currency Symbol**: ETH
+3.  **Import Account**:
+    *   Import a private key from the running `anvil` terminal.
+    *   **Test Key**: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80` (Account 0)
+4.  **Important Note**:
+    *   When you restart `anvil`, the blockchain state resets.
+    *   You must **reset your account** in MetaMask to fix nonce errors:
+        *   `Settings` -> `Advanced` -> `Clear activity tab data`
+
 ## Project Structure
 
 ```

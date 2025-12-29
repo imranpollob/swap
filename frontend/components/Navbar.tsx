@@ -29,11 +29,20 @@ export function Navbar() {
 }
 
 import { useConnect, useAccount, useDisconnect } from 'wagmi';
+import { useState, useEffect } from 'react';
 
 function ConnectWallet() {
   const { connectors, connect } = useConnect();
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
+
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   if (isConnected) {
     return (
