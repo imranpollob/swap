@@ -25,12 +25,16 @@ contract Factory {
         require(token0 != address(0), "Factory: ZERO_ADDRESS");
         require(getPair[token0][token1] == address(0), "Factory: PAIR_EXISTS");
 
-        Pair newPair = new Pair();
-        pair = address(newPair);
-        newPair.initialize(token0, token1);
+        bytes memory bytecode = type(Pair).creationCode;
+        bytes32 salt = keccak256(abi.encodePacked(token0, token1));
+        assembly {
+            pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
+        }
+
+        Pair(pair).initialize(token0, token1);
 
         getPair[token0][token1] = pair;
-        getPair[token1][token0] = pair; // populate mapping in the reverse direction
+        getPair[token1][token0] = pair;
         allPairs.push(pair);
         emit PairCreated(token0, token1, pair, allPairs.length);
     }

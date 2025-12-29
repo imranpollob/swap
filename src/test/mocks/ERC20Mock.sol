@@ -1,63 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract ERC20Mock {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
+import "solmate/tokens/ERC20.sol";
 
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
+contract ERC20Mock is ERC20 {
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        uint8 _decimals
+    ) ERC20(_name, _symbol, _decimals) {}
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 value
-    );
-
-    constructor(string memory _name, string memory _symbol, uint8 _decimals) {
-        name = _name;
-        symbol = _symbol;
-        decimals = _decimals;
-    }
-
-    function mint(address to, uint256 amount) public {
-        balanceOf[to] += amount;
-        emit Transfer(address(0), to, amount);
-    }
-
-    function approve(address spender, uint256 amount) public returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
-        return true;
-    }
-
-    function transfer(address to, uint256 amount) public returns (bool) {
-        return transferFrom(msg.sender, to, amount);
-    }
-
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public returns (bool) {
-        require(balanceOf[from] >= amount, "ERC20Mock: insufficient balance");
-
-        if (
-            from != msg.sender &&
-            allowance[from][msg.sender] != type(uint256).max
-        ) {
-            require(
-                allowance[from][msg.sender] >= amount,
-                "ERC20Mock: insufficient allowance"
-            );
-            allowance[from][msg.sender] -= amount;
-        }
-
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(from, to, amount);
-        return true;
+    function mint(address to, uint256 value) public {
+        _mint(to, value);
     }
 }

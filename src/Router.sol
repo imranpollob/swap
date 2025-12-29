@@ -2,15 +2,18 @@
 pragma solidity ^0.8.0;
 
 import "./Factory.sol";
-import "./libraries/TransferHelper.sol";
+import "solmate/utils/SafeTransferLib.sol";
+import "solmate/tokens/ERC20.sol";
+import "./Pair.sol";
 
 interface IWETH {
     function deposit() external payable;
     function withdraw(uint) external;
-    function transfer(address to, uint value) external returns (bool);
 }
 
 contract Router {
+    using SafeTransferLib for ERC20;
+
     address public factory;
     address public WETH;
 
@@ -37,7 +40,6 @@ contract Router {
         uint amountAMin,
         uint amountBMin
     ) internal returns (uint amountA, uint amountB) {
-        // create the pair if it doesn't exist yet
         if (Factory(factory).getPair(tokenA, tokenB) == address(0)) {
             Factory(factory).createPair(tokenA, tokenB);
         }
@@ -87,8 +89,8 @@ contract Router {
             amountBMin
         );
         address pair = pairFor(tokenA, tokenB);
-        TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);
-        TransferHelper.safeTransferFrom(tokenB, msg.sender, pair, amountB);
+        ERC20(tokenA).safeTransferFrom(msg.sender, pair, amountA);
+        ERC20(tokenB).safeTransferFrom(msg.sender, pair, amountB);
         liquidity = Pair(pair).mint(to);
     }
 
@@ -103,7 +105,9 @@ contract Router {
         uint deadline
     ) public ensure(deadline) returns (uint amountA, uint amountB) {
         address pair = pairFor(tokenA, tokenB);
-        TransferHelper.safeTransferFrom(pair, msg.sender, pair, liquidity); // send LP to pair
+        // Transfer LP tokens from user to pair
+        // Note: Generic ERC20 interface used for LP token
+        ERC20(pair).safeTransferFrom(msg.sender, pair, liquidity);
         (amountA, amountB) = Pair(pair).burn(to);
         (address token0, ) = sortTokens(tokenA, tokenB);
         (amountA, amountB) = tokenA == token0
@@ -126,8 +130,7 @@ contract Router {
             amounts[amounts.length - 1] >= amountOutMin,
             "Router: INSUFFICIENT_OUTPUT_AMOUNT"
         );
-        TransferHelper.safeTransferFrom(
-            path[0],
+        ERC20(path[0]).safeTransferFrom(
             msg.sender,
             pairFor(path[0], path[1]),
             amounts[0]
@@ -171,12 +174,26 @@ contract Router {
         require(token0 != address(0), "Router: ZERO_ADDRESS");
     }
 
+    // Calculates the CREATE2 address for a pair without making any external calls
     function pairFor(
         address tokenA,
         address tokenB
     ) internal view returns (address pair) {
-        pair = Factory(factory).getPair(tokenA, tokenB);
-        require(pair != address(0), "Router: PAIR_NOT_FOUND");
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        pair = address(
+            uint160(
+                uint(
+                    keccak256(
+                        abi.encodePacked(
+                            hex"ff",
+                            factory,
+                            keccak256(abi.encodePacked(token0, token1)),
+                            keccak256(type(Pair).creationCode) // Bytecode hash
+                        )
+                    )
+                )
+            )
+        );
     }
 
     function getReserves(
