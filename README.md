@@ -1,60 +1,117 @@
 # MiniSwap V2
 
-A minimal implementation of Uniswap V2 (Factory, Pair, Router) + Next.js Frontend.
+A **production-ready** Uniswap V2 implementation featuring comprehensive testing, ETH wrappers, and TWAP oracle — built for portfolio demonstration.
 
-## Architecture
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Frontend  │───▶│   Router    │───▶│    Pair     │
+│  (Next.js)  │    │ (Periphery) │    │   (Core)    │
+└─────────────┘    └──────┬──────┘    └──────┬──────┘
+                          │                   │
+                   ┌──────▼──────┐    ┌──────▼──────┐
+                   │   Factory   │    │   Oracle    │
+                   │ (Registry)  │    │   (TWAP)    │
+                   └─────────────┘    └─────────────┘
+```
 
-### Contracts (Foundry)
-- **Core**: `src/Factory.sol`, `src/Pair.sol`
-- **Periphery**: `src/Router.sol`, `src/WETH9.sol`
-- **Libraries**: `src/libraries/Math.sol`, `src/libraries/TransferHelper.sol`
+## Features
 
-### Frontend (Next.js)
-- **Directory**: `frontend/`
-- **Framework**: Next.js 15 + TypeScript + Tailwind CSS
-- **Web3**: `viem` + `wagmi`
-- **State**: React Query
+| Feature             | Status | Description                     |
+| ------------------- | ------ | ------------------------------- |
+| Token Swaps         | ✅      | ERC20 ↔ ERC20 with 0.3% fee     |
+| Liquidity Provision | ✅      | Add/remove liquidity, LP tokens |
+| ETH Support         | ✅      | Native ETH wrapping/unwrapping  |
+| Exact Output Swaps  | ✅      | Specify desired output amount   |
+| Multi-hop Routing   | ✅      | A→B→C path support              |
+| TWAP Oracle         | ✅      | Manipulation-resistant pricing  |
+| Slippage Protection | ✅      | Min output / max input guards   |
+| Deadline Protection | ✅      | Transaction expiry              |
 
-## Prerequisites
+## Quick Start
+
+### Prerequisites
 - [Foundry](https://getfoundry.sh)
-- [Node.js](https://nodejs.org/) >= 18
+- Node.js ≥ 18
 
-## Getting Started
+### 1. Deploy Contracts
 
-### 1. Contracts Setup
-
-Start a local node:
 ```bash
+# Start local node
 anvil
+
+# Deploy (new terminal)
+forge script script/Deploy.s.sol \
+  --rpc-url http://127.0.0.1:8545 \
+  --broadcast \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ```
 
-In a new terminal, deploy contracts:
-```bash
-# Deploy to local Anvil node (ensure anvil is running)
-forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-```
-*Note: The private key `0xac09...` is the default Account 0 for Anvil.*
-
-Copy the deployed addresses from the output (WETH9, Factory, Router, TestTokenA) and update `frontend/src/lib/addresses.ts`.
-
-### 2. Frontend Setup
+### 2. Run Frontend
 
 ```bash
 cd frontend
 npm install
 npm run dev
+# Open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+### 3. Run Tests
 
-## Features (MVP)
-- **Swap**: Swap exact tokens for tokens (WETH <> TKA)
-- **Pool**: Add liquidity to WETH/TKA pair.
-
-## Testing
-
-Run contract tests:
 ```bash
-cd contracts
+# All tests
 forge test
+
+# With gas report
+forge test --gas-report
+
+# Specific test file
+forge test --match-path test/MarketConditions.t.sol -vvv
 ```
+
+## Project Structure
+
+```
+├── src/
+│   ├── Factory.sol      # Pair registry, CREATE2 deployment
+│   ├── Pair.sol         # AMM core with x*y=k invariant
+│   ├── Router.sol       # User-facing periphery (swaps, liquidity, ETH)
+│   ├── Oracle.sol       # TWAP price oracle
+│   └── WETH9.sol        # Wrapped ETH
+├── test/
+│   ├── EdgeCases.t.sol       # 20 boundary condition tests
+│   ├── MarketConditions.t.sol # 10 real-world scenario tests
+│   ├── RemoveLiquidity.t.sol  # 9 LP lifecycle tests
+│   ├── MultiHop.t.sol         # 10 routing tests
+│   ├── RouterExtensions.t.sol # 12 ETH/exact output tests
+│   ├── SwapFuzz.t.sol         # Fuzz testing
+│   └── Invariant.t.sol        # Invariant testing
+├── frontend/            # Next.js 15 + wagmi + viem
+└── script/
+    └── Deploy.s.sol     # Deployment + initial liquidity
+```
+
+## Test Coverage
+
+| Category                | Tests  | Coverage                               |
+| ----------------------- | ------ | -------------------------------------- |
+| Edge Cases              | 20     | Zero amounts, overflows, precision     |
+| Market Conditions       | 10     | Slippage, sandwich attacks, volatility |
+| Remove Liquidity        | 9      | Full/partial removal, fee accumulation |
+| Multi-Hop               | 10     | 3/4-token paths, efficiency            |
+| Router Extensions       | 12     | ETH wrappers, exact output             |
+| Core + Fuzz + Invariant | 5      | Basic ops, random inputs               |
+| **Total**               | **66** |                                        |
+
+## Documentation
+
+- [TEST_SCENARIOS.md](./TEST_SCENARIOS.md) — Detailed test catalog
+- [DEFI_DOCUMENTATION.md](./DEFI_DOCUMENTATION.md) — Protocol deep-dive
+
+## Tech Stack
+
+**Contracts**: Solidity 0.8.24, Foundry, Solmate  
+**Frontend**: Next.js 15, TypeScript, wagmi, viem, TailwindCSS
+
+## License
+
+MIT

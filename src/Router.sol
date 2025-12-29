@@ -234,6 +234,21 @@ contract Router {
         amountOut = numerator / denominator;
     }
 
+    function getAmountIn(
+        uint amountOut,
+        uint reserveIn,
+        uint reserveOut
+    ) internal pure returns (uint amountIn) {
+        require(amountOut > 0, "Router: INSUFFICIENT_OUTPUT_AMOUNT");
+        require(
+            reserveIn > 0 && reserveOut > 0,
+            "Router: INSUFFICIENT_LIQUIDITY"
+        );
+        uint numerator = reserveIn * amountOut * 1000;
+        uint denominator = (reserveOut - amountOut) * 997;
+        amountIn = (numerator / denominator) + 1;
+    }
+
     function getAmountsOut(
         uint amountIn,
         address[] memory path
@@ -247,6 +262,182 @@ contract Router {
                 path[i + 1]
             );
             amounts[i + 1] = getAmountOut(amounts[i], reserveIn, reserveOut);
+        }
+    }
+
+    function getAmountsIn(
+        uint amountOut,
+        address[] memory path
+    ) public view returns (uint[] memory amounts) {
+        require(path.length >= 2, "Router: INVALID_PATH");
+        amounts = new uint[](path.length);
+        amounts[amounts.length - 1] = amountOut;
+        for (uint i = path.length - 1; i > 0; i--) {
+            (uint reserveIn, uint reserveOut) = getReserves(
+                path[i - 1],
+                path[i]
+            );
+            amounts[i - 1] = getAmountIn(amounts[i], reserveIn, reserveOut);
+        }
+    }
+
+    // **** SWAP (EXACT OUTPUT) ****
+    function swapTokensForExactTokens(
+        uint amountOut,
+        uint amountInMax,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external ensure(deadline) returns (uint[] memory amounts) {
+        amounts = getAmountsIn(amountOut, path);
+        require(amounts[0] <= amountInMax, "Router: EXCESSIVE_INPUT_AMOUNT");
+        ERC20(path[0]).safeTransferFrom(
+            msg.sender,
+            pairFor(path[0], path[1]),
+            amounts[0]
+        );
+        _swap(amounts, path, to);
+    }
+
+    // **** ETH WRAPPER FUNCTIONS ****
+    function addLiquidityETH(
+        address token,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    )
+        external
+        payable
+        ensure(deadline)
+        returns (uint amountToken, uint amountETH, uint liquidity)
+    {
+        (amountToken, amountETH) = _addLiquidity(
+            token,
+            WETH,
+            amountTokenDesired,
+            msg.value,
+            amountTokenMin,
+            amountETHMin
+        );
+        address pair = pairFor(token, WETH);
+        ERC20(token).safeTransferFrom(msg.sender, pair, amountToken);
+        IWETH(WETH).deposit{value: amountETH}();
+        ERC20(WETH).safeTransfer(pair, amountETH);
+        liquidity = Pair(pair).mint(to);
+        // Refund excess ETH
+        if (msg.value > amountETH) {
+            (bool success, ) = msg.sender.call{value: msg.value - amountETH}(
+                ""
+            );
+            require(success, "Router: ETH_REFUND_FAILED");
+        }
+    }
+
+    function removeLiquidityETH(
+        address token,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) public ensure(deadline) returns (uint amountToken, uint amountETH) {
+        (amountToken, amountETH) = removeLiquidity(
+            token,
+            WETH,
+            liquidity,
+            amountTokenMin,
+            amountETHMin,
+            address(this),
+            deadline
+        );
+        ERC20(token).safeTransfer(to, amountToken);
+        IWETH(WETH).withdraw(amountETH);
+        (bool success, ) = to.call{value: amountETH}("");
+        require(success, "Router: ETH_TRANSFER_FAILED");
+    }
+
+    function swapExactETHForTokens(
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external payable ensure(deadline) returns (uint[] memory amounts) {
+        require(path[0] == WETH, "Router: INVALID_PATH");
+        amounts = getAmountsOut(msg.value, path);
+        require(
+            amounts[amounts.length - 1] >= amountOutMin,
+            "Router: INSUFFICIENT_OUTPUT_AMOUNT"
+        );
+        IWETH(WETH).deposit{value: amounts[0]}();
+        ERC20(WETH).safeTransfer(pairFor(path[0], path[1]), amounts[0]);
+        _swap(amounts, path, to);
+    }
+
+    function swapTokensForExactETH(
+        uint amountOut,
+        uint amountInMax,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external ensure(deadline) returns (uint[] memory amounts) {
+        require(path[path.length - 1] == WETH, "Router: INVALID_PATH");
+        amounts = getAmountsIn(amountOut, path);
+        require(amounts[0] <= amountInMax, "Router: EXCESSIVE_INPUT_AMOUNT");
+        ERC20(path[0]).safeTransferFrom(
+            msg.sender,
+            pairFor(path[0], path[1]),
+            amounts[0]
+        );
+        _swap(amounts, path, address(this));
+        IWETH(WETH).withdraw(amounts[amounts.length - 1]);
+        (bool success, ) = to.call{value: amounts[amounts.length - 1]}("");
+        require(success, "Router: ETH_TRANSFER_FAILED");
+    }
+
+    function swapExactTokensForETH(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external ensure(deadline) returns (uint[] memory amounts) {
+        require(path[path.length - 1] == WETH, "Router: INVALID_PATH");
+        amounts = getAmountsOut(amountIn, path);
+        require(
+            amounts[amounts.length - 1] >= amountOutMin,
+            "Router: INSUFFICIENT_OUTPUT_AMOUNT"
+        );
+        ERC20(path[0]).safeTransferFrom(
+            msg.sender,
+            pairFor(path[0], path[1]),
+            amounts[0]
+        );
+        _swap(amounts, path, address(this));
+        IWETH(WETH).withdraw(amounts[amounts.length - 1]);
+        (bool success, ) = to.call{value: amounts[amounts.length - 1]}("");
+        require(success, "Router: ETH_TRANSFER_FAILED");
+    }
+
+    function swapETHForExactTokens(
+        uint amountOut,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external payable ensure(deadline) returns (uint[] memory amounts) {
+        require(path[0] == WETH, "Router: INVALID_PATH");
+        amounts = getAmountsIn(amountOut, path);
+        require(amounts[0] <= msg.value, "Router: EXCESSIVE_INPUT_AMOUNT");
+        IWETH(WETH).deposit{value: amounts[0]}();
+        ERC20(WETH).safeTransfer(pairFor(path[0], path[1]), amounts[0]);
+        _swap(amounts, path, to);
+        // Refund excess ETH
+        if (msg.value > amounts[0]) {
+            (bool success, ) = msg.sender.call{value: msg.value - amounts[0]}(
+                ""
+            );
+            require(success, "Router: ETH_REFUND_FAILED");
         }
     }
 }
