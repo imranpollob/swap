@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "forge-std/Script.sol";
+import "../src/Factory.sol";
+import "../src/Router.sol";
+import "../src/WETH9.sol";
+import "../src/test/mocks/ERC20Mock.sol";
+
+contract DeployScript is Script {
+    function run() external {
+        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0));
+
+        if (deployerPrivateKey != 0) {
+            vm.startBroadcast(deployerPrivateKey);
+        } else {
+            vm.startBroadcast();
+        }
+
+        WETH9 weth = new WETH9();
+        console.log("WETH9 deployed at:", address(weth));
+
+        Factory factory = new Factory();
+        console.log("Factory deployed at:", address(factory));
+
+        Router router = new Router(address(factory), address(weth));
+        console.log("Router deployed at:", address(router));
+
+        // Deploy a test token
+        ERC20Mock tokenA = new ERC20Mock("Test Token A", "TKA", 18);
+        console.log("TestTokenA deployed at:", address(tokenA));
+        tokenA.mint(msg.sender, 1000000 * 10 ** 18); // Mint some to deployer
+
+        vm.stopBroadcast();
+    }
+}
