@@ -277,6 +277,9 @@ contract Oracle {
         blockTimestamp = uint32(block.timestamp);
         (uint112 reserve0, uint112 reserve1, uint32 timestampLast) = Pair(pair)
             .getReserves();
+        
+        price0Cumulative = Pair(pair).price0CumulativeLast();
+        price1Cumulative = Pair(pair).price1CumulativeLast();
 
         // If time has elapsed since the last update on the pair,
         // we need to accumulate the price since then
@@ -284,11 +287,14 @@ contract Oracle {
             uint32 timeElapsed = blockTimestamp - timestampLast;
 
             // Calculate price in Q112.112 format
-            uint256 price0 = (uint256(reserve1) << 112) / reserve0;
-            uint256 price1 = (uint256(reserve0) << 112) / reserve1;
+            // * never overflows, and + overflow is desired
+            unchecked {
+                uint256 price0 = (uint256(reserve1) << 112) / reserve0;
+                uint256 price1 = (uint256(reserve0) << 112) / reserve1;
 
-            price0Cumulative = price0 * timeElapsed;
-            price1Cumulative = price1 * timeElapsed;
+                price0Cumulative += price0 * timeElapsed;
+                price1Cumulative += price1 * timeElapsed;
+            }
         }
     }
 }

@@ -71,6 +71,9 @@ contract Pair is ERC20 {
         _blockTimestampLast = blockTimestampLast;
     }
 
+    uint public price0CumulativeLast;
+    uint public price1CumulativeLast;
+
     function _update(
         uint balance0,
         uint balance1,
@@ -81,9 +84,22 @@ contract Pair is ERC20 {
             balance0 <= type(uint112).max && balance1 <= type(uint112).max,
             "Pair: OVERFLOW"
         );
+        uint32 blockTimestamp = uint32(block.timestamp);
+        uint32 timeElapsed = blockTimestamp - blockTimestampLast;
+        if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
+            // * never overflows, and + overflow is desired
+            unchecked {
+                price0CumulativeLast +=
+                    uint((uint(_reserve1) << 112) / _reserve0) *
+                    timeElapsed;
+                price1CumulativeLast +=
+                    uint((uint(_reserve0) << 112) / _reserve1) *
+                    timeElapsed;
+            }
+        }
         reserve0 = uint112(balance0);
         reserve1 = uint112(balance1);
-        blockTimestampLast = uint32(block.timestamp);
+        blockTimestampLast = blockTimestamp;
         emit Sync(reserve0, reserve1);
     }
 
@@ -144,7 +160,7 @@ contract Pair is ERC20 {
         uint amount0Out,
         uint amount1Out,
         address to,
-        bytes calldata data
+        bytes calldata /* data */
     ) external lock {
         require(
             amount0Out > 0 || amount1Out > 0,
