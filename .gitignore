@@ -2,24 +2,17 @@
 cache/
 out/
 
-# Ignores development broadcast logs
+# Development broadcast logs
 broadcast/
 
-# Node.js / Frontend
+# Node.js
 node_modules/
-frontend/node_modules/
-.next/
-frontend/.next/
-frontend/out/
-build/
 dist/
+build/
 
 # Environment variables
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
 
 # IDEs and Editors
 .idea/
@@ -30,7 +23,3 @@ dist/
 # System Files
 .DS_Store
 Thumbs.db
-
-# Foundry
-lib/forge-std/
-lib/solmate/
