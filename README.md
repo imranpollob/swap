@@ -1,150 +1,117 @@
-# MiniSwap V2
+# Swap
 
-A **production-ready** AMM implementation featuring comprehensive testing, ETH wrappers, and TWAP oracle — built for portfolio demonstration.
+**Swap** is a decentralized exchange (DEX) protocol based on the **Constant Product Market Maker (CPMM)** model. It enables trustless token swaps and automated liquidity provision using a peer-to-contract architecture.
 
+## Key Capabilities
+
+- **Efficient Swaps**: Swap any ERC20 pair with a competitive 0.3% fee.
+- **Liquidity Provision**: Earn trading fees by providing liquidity and receiving fungible LP tokens.
+- **Native ETH Integration**: Robust WETH wrapping allows seamless interaction with native Ether.
+- **Advanced Pricing**: Integrated TWAP (Time-Weighted Average Price) oracle for manipulation-resistant on-chain pricing.
+- **Optimistic Transfers**: Built-in support for Flash Swaps (borrow-and-repay in one transaction).
+
+---
+
+## Architecture
+
+The system follows a modular architecture separating core logic from user-facing periphery:
+
+```mermaid
+graph TD
+    User([User / Bot]) --> Router
+    Router[Router Periphery] --> Factory[Factory Registry]
+    Router --> Pair[Core Pair Contract]
+    Pair --> Oracle[TWAP Oracle]
+    Pair --> WETH[WETH9 Wrapper]
 ```
-┌─────────────┐    ┌─────────────┐
-│   Router    │───▶│    Pair     │
-│ (Periphery) │    │   (Core)    │
-└──────┬──────┘    └──────┬──────┘
-       │                   │
-┌──────▼──────┐    ┌──────▼──────┐
-│   Factory   │    │   Oracle    │
-│ (Registry)  │    │   (TWAP)    │
-└─────────────┘    └─────────────┘
-```
-
-## Overview
-
-This project implements a decentralized exchange (DEX) protocol based on the **Constant Product Market Maker (CPMM)** model. It facilitates trustless token swapping and automated liquidity provision, architected for security and extensibility.
-
-### Key Features
-
-| Feature         | Description                                 |
-| --------------- | ------------------------------------------- |
-| **Token Swaps** | ERC20 ↔ ERC20 with 0.3% fee                 |
-| **Liquidity**   | Automated market making with LP tokens      |
-| **ETH Support** | Native ETH wrapping/unwrapping              |
-| **Oracle**      | On-chain TWAP (Time-Weighted Average Price) |
-| **Safety**      | Slippage protection & deadline checks       |
-| **Flash Swaps** | Optimistic transfers (borrow before pay)    |
 
 ---
 
-## Architecture & Mechanics
+## Protocol Mechanics
 
-### Core Contracts
+### The Constant Product Invariant
+The core mechanism relies on the invariant $x \cdot y = k$, where $x$ and $y$ are the reserves of two tokens in a pool. This ensures that the product $k$ remains constant (excluding fees) during every trade.
 
-*   **Factory (`Factory.sol`)**: The registry that deploys valid `Pair` contracts using `create2`. Ensures only one canonical pool exists per token pair.
-*   **Pair (`Pair.sol`)**: Holds liquidity reserves and executes low-level swaps. Enforces the $x \cdot y = k$ constant product invariant.
-*   **Router (`Router.sol`)**: The user-facing periphery. It handles multi-hop routing, safety checks (slippage, deadlines), and abstracting interaction with Pairs.
+### 1. Liquidity Provision
+Liquidity Providers (LPs) deposit tokens in a 1:1 value ratio. The protocol mints LP tokens representing their fractional share of the pool:
+$$\text{LP Tokens} = \sqrt{\text{amountA} \cdot \text{amountB}}$$
 
-### How it Works
+### 2. Pricing & Fees
+A 0.3% fee is deducted from the input amount before executing the trade. The output is calculated as:
+$$ \text{AmountOut} = \frac{\Delta x \cdot 0.997 \cdot y}{x + (\Delta x \cdot 0.997)} $$
 
-#### Automated Market Maker (AMM)
-The protocol relies on the invariant $x \cdot y = k$, where $x$ and $y$ are the reserves of two tokens. When a user trades, they add to one reserve and subtract from the other, shifting the price along the hyperbola defined by $k$.
-
-#### 1. Adding Liquidity
-LPs deposit an equal value of both tokens. The protocol calculates optimal ratios to prevent arbitrage:
-`amountB_optimal = amountA * reserveB / reserveA`
-LPs receive **LP Tokens** representing their fractional ownership of the pool's liquidity.
-
-#### 2. Swapping
-Output amounts are calculated with a 0.3% fee applied to the input:
-$$ \text{Amount Out} = \frac{\text{Amount In} \cdot 997 \cdot \text{Reserve Out}}{(\text{Reserve In} \cdot 1000) + (\text{Amount In} \cdot 997)} $$
-
-#### 3. Removing Liquidity
-LPs burn their LP tokens to receive their proportional share of the underlying reserves, including accumulated trading fees.
-
-### Advanced Features
-
-#### TWAP Oracle (`Oracle.sol`)
-Provides manipulation-resistant price feeds.
-*   **Mechanism**: Accumulates cumulative prices on every block interaction.
-*   **Usage**: `TWAP = (priceCumulativeEnd - priceCumulativeStart) / timeElapsed`.
-*   **Security**: Attacking the oracle requires sustaining a manipulated price over the entire period, making it economically infeasible for long durations.
-
-#### Flash Loans
-The `Pair` contract supports flash swaps, allowing users to receive tokens *before* paying for them, provided the invariant constraint is met by the end of the transaction.
+### 3. Price Oracle (TWAP)
+To prevent flash-loan attacks and price manipulation, the protocol records cumulative prices. External contracts can consult the oracle to get the average price over a specific time window:
+$$\text{Average Price} = \frac{\text{PriceCumulative}_{\text{end}} - \text{PriceCumulative}_{\text{start}}}{\text{Time}_{\text{end}} - \text{Time}_{\text{start}}}$$
 
 ---
 
-## Security Considerations
+## Smart Contracts
 
-1.  **Reentrancy Protection**: Critical functions in `Pair.sol` are protected by a mutex lock to prevent reentrant attacks.
-2.  **Slippage Guards**: Router functions require `amountOutMin` or `amountInMax` arguments to protect users from front-running/sandwich attacks.
-3.  **Deadlines**: Transactions expire if not executed by a specific timestamp, preventing miners from holding transactions until they are unfavorable.
-4.  **K Invariant**: The strict enforcement of `reserve0 * reserve1 >= k` ensures the pool can never be drained (except for negligible rounding).
+| Contract        | Role        | Key Functionality                                      |
+| :-------------- | :---------- | :----------------------------------------------------- |
+| **Factory.sol** | Registry    | Standardized pool deployment via `CREATE2`.            |
+| **Pair.sol**    | Core Engine | Reserve management, swap verification, LP token logic. |
+| **Router.sol**  | Periphery   | Multi-hop routing, safety checks, and ETH handling.    |
+| **Oracle.sol**  | Utility     | Accumulation and calculation of TWAP price feeds.      |
+| **WETH9.sol**   | Wrapper     | Industry-standard Ether wrapping for gas efficiency.   |
 
 ---
 
-## Development
+## Security Features
+
+- **Reentrancy Protection**: All state-changing core functions use a non-reentrant mutex.
+- **Slippage Protection**: Guaranteed minimum output and maximum input parameters for every swap.
+- **Deadline Enforcement**: Transactions expire if block timestamp exceeds user-defined limits.
+- **Precision Engineering**: Minimized rounding errors to ensure the $k$ invariant is always strictly protected.
+
+---
+
+## Development & Deployment
 
 ### Tech Stack
-*   **Language**: Solidity 0.8.24
-*   **Framework**: Foundry (Forge, Cast, Anvil)
-*   **Lib**: Solmate (for optimized ERC20)
+- **Solidity**: ^0.8.24
+- **Framework**: Foundry (Forge/Cast)
+- **Library**: Solmate (for optimized math and gas performance)
 
-### Project Structure
-```
-├── src/
-│   ├── Factory.sol      # Registry & Pair deployment
-│   ├── Pair.sol         # Core AMM logic
-│   ├── Router.sol       # User interaction layer
-│   ├── Oracle.sol       # Price feeds
-│   └── WETH9.sol        # ETH wrapper
-├── test/
-│   ├── EdgeCases.t.sol       # Boundary conditions
-│   ├── MarketConditions.t.sol # Simulation tests
-│   ├── RemoveLiquidity.t.sol  # LP flows
-│   ├── MultiHop.t.sol         # Routing logic
-│   └── SwapFuzz.t.sol         # Fuzzing
-└── script/
-    └── Deploy.s.sol     # Deployment scripts
-```
+### Fast Track Deployment
 
-### Quick Start
+1. **Install Dependencies**
+   ```bash
+   git submodule update --init --recursive
+   ```
 
-**Prerequisites**: [Foundry](https://getfoundry.sh), Node.js ≥ 18
+2. **Spin up Local Environment**
+   ```bash
+   anvil
+   ```
 
-1.  **Start Local Chain**
-    ```bash
-    anvil
-    ```
-
-2.  **Deploy Contracts**
-    ```bash
-    forge script script/Deploy.s.sol \
-      --rpc-url http://127.0.0.1:8545 \
-      --broadcast \
-      --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-    ```
+3. **Deploy to Local Cluster**
+   ```bash
+   forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+   ```
 
 ---
 
-## Testing & Verification
+## Quality Assurance
 
-The project implements a comprehensive test suite with **66 tests** covering edge cases, market simulations, and fuzzing.
+The codebase underwent rigorous verification with **69 high-fidelity tests** covering unit, integration, fuzzing, and invariant testing.
 
-### Run Tests
+### Execution
 ```bash
-forge test                  # Run all
-forge test -vvv             # Verbose execution traces
-forge test --gas-report     # Gas usage analysis
+forge test -vvv --gas-report
 ```
 
-### Test Scope
-
-| Category         | Count | Focus Areas                                                                 |
-| :--------------- | :---- | :-------------------------------------------------------------------------- |
-| **Edge Cases**   | 20    | Zero amounts, overflows, precision loss, expired deadlines, invalid paths.  |
-| **Market Types** | 10    | High slippage, sandwich attacks, liquidity draining, volatility simulation. |
-| **LP Lifecycle** | 9     | Full/partial removals, fee accumulation, multiple providers.                |
-| **Multi-Hop**    | 10    | A→B→C routing, fee compounding, path efficiency.                            |
-| **Router Ext**   | 12    | WETH wrapping, exact output swaps (`swapTokensForExactTokens`).             |
-| **Invariants**   | 5+    | Fuzzing 1000s of runs to ensure `reserves <= balances`.                     |
+### Coverage Matrix
+- **Foundational**: 20 Edge case and boundary condition tests.
+- **Economic**: 10 Market simulation tests (Sandwich attacks, volatility).
+- **Lifecycle**: 9 Liquidity provision and fee accumulation tests.
+- **Complex**: 10 Multi-hop routing and efficiency tests.
+- **Fuzzing**: Random input testing with thousands of iterations.
+- **Invariants**: Reserve vs. Balance property verification.
 
 ---
 
 ## License
-MIT
+
+This project is licensed under the [MIT License](LICENSE).
