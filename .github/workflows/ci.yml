@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Format check
+        run: forge fmt --check
+
+      - name: Build with sizes
+        run: forge build --sizes
+
+      - name: Test (CI profile: high fuzz/invariant runs)
+        run: FOUNDRY_PROFILE=ci forge test -vvv
+
+      - name: Coverage
+        run: forge coverage --ir-minimum --report summary --report lcov
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: lcov.info*
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install Slither
+        run: pip install slither-analyzer
+
+      - name: Slither
+        run: slither . --config-file slither.config.json
+        continue-on-error: true
+
+      - name: Install Aderyn
+        run: |
+          curl -L https://raw.githubusercontent.com/Cyfrin/aderyn/dev/cyfrinup/install-aderyn.sh | bash
+          echo "$HOME/.cyfrin/bin" >> "$GITHUB_PATH"
+
+      - name: Aderyn
+        run: aderyn .
+        continue-on-error: true

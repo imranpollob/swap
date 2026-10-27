@@ -60,13 +60,7 @@ contract EdgeCasesTest is Test {
         path[1] = address(tokenB);
 
         vm.expectRevert("Router: INSUFFICIENT_INPUT_AMOUNT");
-        router.swapExactTokensForTokens(
-            0,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(0, 0, path, address(this), block.timestamp);
     }
 
     function testRevert_AddLiquidityZeroAmountA() public {
@@ -105,13 +99,7 @@ contract EdgeCasesTest is Test {
         path[1] = address(tokenB);
 
         vm.expectRevert("Router: EXPIRED");
-        router.swapExactTokensForTokens(
-            1 * 10 ** 18,
-            0,
-            path,
-            address(this),
-            block.timestamp - 1
-        );
+        router.swapExactTokensForTokens(1 * 10 ** 18, 0, path, address(this), block.timestamp - 1);
     }
 
     function testRevert_AddLiquidityExpiredDeadline() public {
@@ -157,11 +145,7 @@ contract EdgeCasesTest is Test {
 
         vm.expectRevert("Router: INSUFFICIENT_OUTPUT_AMOUNT");
         router.swapExactTokensForTokens(
-            amountIn,
-            impossibleMinOut,
-            path,
-            address(this),
-            block.timestamp
+            amountIn, impossibleMinOut, path, address(this), block.timestamp
         );
     }
 
@@ -208,13 +192,7 @@ contract EdgeCasesTest is Test {
 
         vm.prank(user);
         vm.expectRevert();
-        router.swapExactTokensForTokens(
-            1 * 10 ** 18,
-            0,
-            path,
-            user,
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(1 * 10 ** 18, 0, path, user, block.timestamp);
     }
 
     function testRevert_AddLiquidityWithoutApproval() public {
@@ -261,13 +239,7 @@ contract EdgeCasesTest is Test {
 
         uint256 balanceBefore = tokenB.balanceOf(address(this));
 
-        router.swapExactTokensForTokens(
-            largeAmount,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(largeAmount, 0, path, address(this), block.timestamp);
 
         uint256 balanceAfter = tokenB.balanceOf(address(this));
         assertGt(balanceAfter, balanceBefore, "Should receive tokens");
@@ -313,13 +285,7 @@ contract EdgeCasesTest is Test {
         path[1] = address(tokenA);
 
         vm.expectRevert();
-        router.swapExactTokensForTokens(
-            1 * 10 ** 18,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(1 * 10 ** 18, 0, path, address(this), block.timestamp);
     }
 
     // ============ REENTRANCY PROTECTION TEST ============
@@ -335,22 +301,10 @@ contract EdgeCasesTest is Test {
         uint256[] memory amounts = router.getAmountsOut(amountIn, path);
 
         // This should succeed (lock is released after tx)
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(amountIn, 0, path, address(this), block.timestamp);
 
         // Second swap should also work (lock released)
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(amountIn, 0, path, address(this), block.timestamp);
     }
 
     // ============ MINIMUM LIQUIDITY TEST ============
@@ -376,18 +330,71 @@ contract EdgeCasesTest is Test {
             block.timestamp
         );
 
-        address newPairAddress = factory.getPair(
-            address(tokenC),
-            address(tokenD)
-        );
+        address newPairAddress = factory.getPair(address(tokenC), address(tokenD));
         Pair newPair = Pair(newPairAddress);
 
         // Check that MINIMUM_LIQUIDITY is locked at address(0)
         uint256 burnedLiquidity = newPair.balanceOf(address(0));
-        assertEq(
-            burnedLiquidity,
-            newPair.MINIMUM_LIQUIDITY(),
-            "Minimum liquidity should be locked"
+        assertEq(burnedLiquidity, newPair.MINIMUM_LIQUIDITY(), "Minimum liquidity should be locked");
+    }
+
+    // ============ FIRST-MINT & INITIALIZE GUARDS ============
+
+    function test_Revert_DustFirstMint() public {
+        // sqrt(2*2) <= MINIMUM_LIQUIDITY: must revert with a reason, not a panic.
+        ERC20Mock tokenC = new ERC20Mock("Token C", "TKC", 18);
+        ERC20Mock tokenD = new ERC20Mock("Token D", "TKD", 18);
+        tokenC.mint(address(this), 100);
+        tokenD.mint(address(this), 100);
+        tokenC.approve(address(router), type(uint256).max);
+        tokenD.approve(address(router), type(uint256).max);
+
+        vm.expectRevert("Pair: INSUFFICIENT_INITIAL_LIQUIDITY");
+        router.addLiquidity(
+            address(tokenC), address(tokenD), 2, 2, 0, 0, address(this), block.timestamp
         );
+    }
+
+    function test_Revert_InitializeTwice() public {
+        vm.prank(address(factory));
+        vm.expectRevert("Pair: ALREADY_INITIALIZED");
+        pair.initialize(address(tokenA), address(tokenB));
+    }
+
+    function test_Revert_InitializeNotFactory() public {
+        vm.expectRevert("Pair: FORBIDDEN");
+        pair.initialize(address(tokenA), address(tokenB));
+    }
+
+    // ============ R-03 NONEXISTENT PAIR ============
+
+    function test_Revert_NonexistentPair() public {
+        ERC20Mock tokenC = new ERC20Mock("Token C", "TKC", 18);
+        ERC20Mock tokenD = new ERC20Mock("Token D", "TKD", 18);
+        tokenC.mint(address(this), 100 * 10 ** 18);
+        tokenD.mint(address(this), 100 * 10 ** 18);
+        tokenC.approve(address(router), type(uint256).max);
+        tokenD.approve(address(router), type(uint256).max);
+
+        address[] memory path = new address[](2);
+        path[0] = address(tokenC);
+        path[1] = address(tokenD);
+
+        vm.expectRevert("Router: PAIR_NOT_FOUND");
+        router.getAmountsOut(1 * 10 ** 18, path);
+
+        vm.expectRevert("Router: PAIR_NOT_FOUND");
+        router.swapExactTokensForTokens(1 * 10 ** 18, 0, path, address(this), block.timestamp);
+    }
+
+    // ============ SKIM RECOVERS DONATIONS ============
+
+    function test_SkimRecoversDonation() public {
+        uint256 donation = 1000;
+        tokenA.mint(address(pair), donation); // bypass mint: pure donation
+
+        uint256 before = tokenA.balanceOf(address(this));
+        pair.skim(address(this));
+        assertEq(tokenA.balanceOf(address(this)) - before, donation);
     }
 }

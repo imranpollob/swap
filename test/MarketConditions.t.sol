@@ -74,15 +74,10 @@ contract MarketConditionsTest is Test {
         // Calculate price impact
         uint256 idealOutput = largeSwap; // In 1:1 pool, ideal would be equal
         uint256 actualOutput = amounts[1];
-        uint256 priceImpact = ((idealOutput - actualOutput) * 100) /
-            idealOutput;
+        uint256 priceImpact = ((idealOutput - actualOutput) * 100) / idealOutput;
 
         // High slippage expected (should be >30% impact for 50% pool trade)
-        assertGt(
-            priceImpact,
-            30,
-            "Large trade should have significant price impact"
-        );
+        assertGt(priceImpact, 30, "Large trade should have significant price impact");
 
         // Trade should still work
         router.swapExactTokensForTokens(
@@ -117,7 +112,7 @@ contract MarketConditionsTest is Test {
         address pairAddress = factory.getPair(address(tokenA), address(tokenB));
         pair = Pair(pairAddress);
 
-        (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
+        (uint112 reserve0, uint112 reserve1,) = pair.getReserves();
         assertGt(reserve0, 0, "Reserve0 should be positive");
         assertGt(reserve1, 0, "Reserve1 should be positive");
     }
@@ -186,21 +181,13 @@ contract MarketConditionsTest is Test {
 
         uint256 lastImpact = 0;
         for (uint i = 0; i < tradeSizes.length; i++) {
-            uint256[] memory amounts = router.getAmountsOut(
-                tradeSizes[i],
-                path
-            );
+            uint256[] memory amounts = router.getAmountsOut(tradeSizes[i], path);
             uint256 idealOutput = tradeSizes[i]; // 1:1 pool
             uint256 actualOutput = amounts[1];
-            uint256 impact = ((idealOutput - actualOutput) * 10000) /
-                idealOutput; // basis points
+            uint256 impact = ((idealOutput - actualOutput) * 10000) / idealOutput; // basis points
 
             // Price impact should increase with trade size
-            assertGt(
-                impact,
-                lastImpact,
-                "Larger trades should have higher impact"
-            );
+            assertGt(impact, lastImpact, "Larger trades should have higher impact");
             lastImpact = impact;
         }
     }
@@ -233,20 +220,10 @@ contract MarketConditionsTest is Test {
         uint256[] memory amounts = router.getAmountsOut(100 * 10 ** 18, path);
 
         // B should be much more valuable than A
-        assertLt(
-            amounts[1],
-            10 * 10 ** 18,
-            "Scarce token B should have high price"
-        );
+        assertLt(amounts[1], 10 * 10 ** 18, "Scarce token B should have high price");
 
         // Swap should work
-        router.swapExactTokensForTokens(
-            100 * 10 ** 18,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(100 * 10 ** 18, 0, path, address(this), block.timestamp);
     }
 
     function test_ImbalancedPool_ArbitrageOpportunity() public {
@@ -270,7 +247,7 @@ contract MarketConditionsTest is Test {
         address pairAddress = factory.getPair(address(tokenA), address(tokenB));
         pair = Pair(pairAddress);
 
-        (uint112 reserve0Pre, uint112 reserve1Pre, ) = pair.getReserves();
+        (uint112 reserve0Pre, uint112 reserve1Pre,) = pair.getReserves();
         uint256 kPre = uint256(reserve0Pre) * uint256(reserve1Pre);
 
         // Arbitrageur swaps to extract value
@@ -278,15 +255,9 @@ contract MarketConditionsTest is Test {
         path[0] = address(tokenB);
         path[1] = address(tokenA);
 
-        router.swapExactTokensForTokens(
-            50 * 10 ** 18,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(50 * 10 ** 18, 0, path, address(this), block.timestamp);
 
-        (uint112 reserve0Post, uint112 reserve1Post, ) = pair.getReserves();
+        (uint112 reserve0Post, uint112 reserve1Post,) = pair.getReserves();
         uint256 kPost = uint256(reserve0Post) * uint256(reserve1Post);
 
         // K should increase (fees collected)
@@ -319,10 +290,7 @@ contract MarketConditionsTest is Test {
 
         // Calculate what victim would get without attack
         uint256 victimAmount = 100 * 10 ** 18;
-        uint256[] memory fairAmounts = router.getAmountsOut(
-            victimAmount,
-            pathAtoB
-        );
+        uint256[] memory fairAmounts = router.getAmountsOut(victimAmount, pathAtoB);
         uint256 fairOutput = fairAmounts[1];
 
         // ATTACKER FRONT-RUNS: Buy B before victim
@@ -348,8 +316,7 @@ contract MarketConditionsTest is Test {
             alice,
             block.timestamp
         );
-        uint256 victimActualOutput = tokenB.balanceOf(alice) -
-            aliceBalanceBefore;
+        uint256 victimActualOutput = tokenB.balanceOf(alice) - aliceBalanceBefore;
         vm.stopPrank();
 
         // ATTACKER BACK-RUNS: Sell B back
@@ -360,20 +327,12 @@ contract MarketConditionsTest is Test {
         vm.startPrank(attacker);
         tokenB.approve(address(router), type(uint256).max);
         router.swapExactTokensForTokens(
-            tokenB.balanceOf(attacker),
-            0,
-            pathBtoA,
-            attacker,
-            block.timestamp
+            tokenB.balanceOf(attacker), 0, pathBtoA, attacker, block.timestamp
         );
         vm.stopPrank();
 
         // Victim got less than fair value
-        assertLt(
-            victimActualOutput,
-            fairOutput,
-            "Victim should get less due to sandwich"
-        );
+        assertLt(victimActualOutput, fairOutput, "Victim should get less due to sandwich");
     }
 
     function test_SandwichProtection_SlippageLimit() public {
@@ -400,22 +359,13 @@ contract MarketConditionsTest is Test {
 
         // Calculate fair price
         uint256 victimAmount = 100 * 10 ** 18;
-        uint256[] memory fairAmounts = router.getAmountsOut(
-            victimAmount,
-            pathAtoB
-        );
+        uint256[] memory fairAmounts = router.getAmountsOut(victimAmount, pathAtoB);
         uint256 minOut = (fairAmounts[1] * 99) / 100; // 1% slippage tolerance
 
         // ATTACKER FRONT-RUNS
         vm.startPrank(attacker);
         tokenA.approve(address(router), type(uint256).max);
-        router.swapExactTokensForTokens(
-            500 * 10 ** 18,
-            0,
-            pathAtoB,
-            attacker,
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(500 * 10 ** 18, 0, pathAtoB, attacker, block.timestamp);
         vm.stopPrank();
 
         // VICTIM SWAPS WITH PROTECTION: Should revert due to slippage
@@ -459,23 +409,11 @@ contract MarketConditionsTest is Test {
 
         // First swap
         uint256[] memory amounts1 = router.getAmountsOut(swapAmount, path);
-        router.swapExactTokensForTokens(
-            swapAmount,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(swapAmount, 0, path, address(this), block.timestamp);
 
         // Second swap (same direction)
         uint256[] memory amounts2 = router.getAmountsOut(swapAmount, path);
-        router.swapExactTokensForTokens(
-            swapAmount,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(swapAmount, 0, path, address(this), block.timestamp);
 
         // Third swap
         uint256[] memory amounts3 = router.getAmountsOut(swapAmount, path);
@@ -507,7 +445,7 @@ contract MarketConditionsTest is Test {
         address pairAddress = factory.getPair(address(tokenA), address(tokenB));
         pair = Pair(pairAddress);
 
-        (uint112 r0Initial, uint112 r1Initial, ) = pair.getReserves();
+        (uint112 r0Initial, uint112 r1Initial,) = pair.getReserves();
         uint256 kInitial = uint256(r0Initial) * uint256(r1Initial);
 
         address[] memory pathAtoB = new address[](2);
@@ -521,22 +459,14 @@ contract MarketConditionsTest is Test {
         // Simulate volatile trading
         for (uint i = 0; i < 10; i++) {
             router.swapExactTokensForTokens(
-                100 * 10 ** 18,
-                0,
-                pathAtoB,
-                address(this),
-                block.timestamp
+                100 * 10 ** 18, 0, pathAtoB, address(this), block.timestamp
             );
             router.swapExactTokensForTokens(
-                100 * 10 ** 18,
-                0,
-                pathBtoA,
-                address(this),
-                block.timestamp
+                100 * 10 ** 18, 0, pathBtoA, address(this), block.timestamp
             );
         }
 
-        (uint112 r0Final, uint112 r1Final, ) = pair.getReserves();
+        (uint112 r0Final, uint112 r1Final,) = pair.getReserves();
         uint256 kFinal = uint256(r0Final) * uint256(r1Final);
 
         // K should increase (fees accumulated)

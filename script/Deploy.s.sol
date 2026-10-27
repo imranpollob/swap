@@ -4,57 +4,45 @@ pragma solidity ^0.8.0;
 import "forge-std/Script.sol";
 import "../src/Factory.sol";
 import "../src/Router.sol";
+import "../src/Oracle.sol";
 import "../src/WETH9.sol";
-import "../src/test/mocks/ERC20Mock.sol";
 
+/// @notice Infrastructure-only deployment: WETH, Factory, Router, Oracle.
+/// No test tokens, no liquidity seeding (see script/SeedLocal.s.sol).
+/// Requires an explicit signer (PRIVATE_KEY); never falls back silently.
 contract DeployScript is Script {
     function run() external {
-        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0));
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
 
-        if (deployerPrivateKey != 0) {
+        address weth;
+        if (block.chainid == 31337) {
+            // Local dev chain: deploy a throwaway WETH9.
             vm.startBroadcast(deployerPrivateKey);
+            weth = address(new WETH9());
         } else {
-            vm.startBroadcast();
+            // Any other chain: use the operator-configured canonical WETH.
+            // Never deploy a lookalike WETH on mainnet/testnet (W-01).
+            weth = vm.envAddress("WETH_ADDRESS");
+            require(weth.code.length > 0, "Deploy: WETH has no code");
+            vm.startBroadcast(deployerPrivateKey);
         }
 
-        WETH9 weth = new WETH9();
-        console.log("WETH9 deployed at:", address(weth));
-
         Factory factory = new Factory();
-        console.log("Factory deployed at:", address(factory));
+        Router router = new Router(address(factory), weth);
+        Oracle oracle = new Oracle(address(factory));
 
-        Router router = new Router(address(factory), address(weth));
-        console.log("Router deployed at:", address(router));
+        // Post-deploy sanity checks (D-04).
+        require(router.factory() == address(factory), "Deploy: factory mismatch");
+        require(router.WETH() == weth, "Deploy: WETH mismatch");
+        require(oracle.factory() == address(factory), "Deploy: oracle factory mismatch");
 
-        // Deploy a test token
-        ERC20Mock tokenA = new ERC20Mock("Test Token A", "TKA", 18);
-        console.log("TestTokenA deployed at:", address(tokenA));
-        tokenA.mint(msg.sender, 1_000_000 * 10 ** 18); // Mint TKA to deployer
-
-        // S E E D   L I Q U I D I T Y
-        // ---------------------------
-        uint256 amountETH = 100 * 10 ** 18;
-        uint256 amountToken = 5000 * 10 ** 18; // 1 ETH = 50 TKA
-
-        // 1. Wrap ETH
-        weth.deposit{value: amountETH}();
-
-        // 2. Approve Router
-        weth.approve(address(router), amountETH);
-        tokenA.approve(address(router), amountToken);
-
-        // 3. Add Liquidity
-        router.addLiquidity(
-            address(tokenA),
-            address(weth),
-            amountToken,
-            amountETH,
-            0,
-            0,
-            msg.sender,
-            block.timestamp + 1000
-        );
-        console.log("Liquidity Added: 100 WETH + 5000 TKA");
+        console.log("Deployer:", deployer);
+        console.log("Chain ID:", block.chainid);
+        console.log("WETH:", weth);
+        console.log("Factory:", address(factory));
+        console.log("Router:", address(router));
+        console.log("Oracle:", address(oracle));
 
         vm.stopBroadcast();
     }

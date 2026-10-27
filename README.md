@@ -1,95 +1,103 @@
-# Swap DEX
+# Swap DEX — a security-focused Uniswap V2-style AMM
 
-A decentralized exchange (DEX) implementation built with Solidity and Foundry, featuring an automated market maker (AMM) protocol with TWAP oracle integration.
+> "I took a Uniswap V2-style AMM and its TWAP oracle as an audit target. I
+> threat-modeled it, found High-severity oracle-integrity and availability
+> issues, wrote executable PoCs that drain a mock lending integrator and make
+> `consult` uncallable, fixed them with a bounded ring buffer, freshness /
+> fail-closed semantics and factory provenance, and proved the fixes with
+> regression tests, invariants, fuzzing, and a professional report."
 
-## Overview
+**This is a security-research portfolio piece, not production code.**
+Self-audit; no professional review; not deployed on mainnet. See
+[`docs/AUDIT_REPORT.md`](docs/AUDIT_REPORT.md) and [`SECURITY.md`](SECURITY.md).
 
-This project implements a production-ready AMM protocol inspired by Uniswap V2, providing trustless token swapping and liquidity provision on the Ethereum blockchain.
+## Findings summary (top 5)
 
-## Core Features
+| ID | Severity | Title | Proof |
+|----|----------|-------|-------|
+| H-01 | High | TWAP guard failed open on missing/short history | `test/exploits/OracleFailOpen.t.sol` |
+| H-02 | High | Unbounded observations → consult DoS (~4.9M gas cold) | `test/exploits/OracleObservationDos.t.sol` |
+| H-03/H-04 | High | Stale + short-window TWAP accepted | `OracleStaleTwap` / `OracleShortWindow` |
+| H-05 | High | Fake pair prices the TWAP (no provenance) | `test/exploits/FakePairOracle.t.sol` |
+| M-02 | Medium | Donation + sync drains spot lenders (666k on 100k) | `test/exploits/DonationSync.t.sol` |
 
-### 🔄 **Automated Market Maker (AMM)**
-- Constant product formula (x * y = k) for price discovery
-- Deterministic pricing based on liquidity pool reserves
-- Slippage protection with minimum output guarantees
+Full inventory with severity, impact, PoC, fix, and verification:
+[`docs/AUDIT_REPORT.md`](docs/AUDIT_REPORT.md).
 
-### 🏭 **Factory Pattern**
-- Deterministic pair creation using CREATE2
-- One pair per token combination
-- Permissionless pair deployment
+## What this demonstrates
 
-### 💧 **Liquidity Management**
-- Add liquidity to trading pairs
-- Remove liquidity with LP tokens
-- Optimal liquidity calculation
-- Minimum liquidity lock for initial providers
+- Manual review + threat modeling → [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md)
+- PoC development + economic analysis (attacker cost vs victim loss, measured)
+- Remediation without breaking the protocol (119/119 green, incl. CI profile)
+- Regression, invariant (8/8), fuzz (independent math), adversarial testing
+- Reporting: audit report, invariants, static-analysis triage, changelog
 
-### 🔀 **Token Swapping**
-- Exact input token swaps
-- Multi-hop routing support
-- Deadline protection for time-sensitive transactions
-- Path-based routing for optimal trade execution
+## Architecture
 
-### 📊 **TWAP Oracle**
-- Time-Weighted Average Price calculations
-- Manipulation-resistant price feeds
-- Cumulative price tracking
-- Configurable observation periods
+```mermaid
+flowchart LR
+    Trader --> Router
+    LP --> Router
+    Router --> Factory
+    Factory -->|CREATE2| Pair
+    Router --> Pair
+    Keeper -->|update| Oracle
+    Oracle -->|reads| Pair
+    Lender -->|consult / guard| Oracle
+```
 
-### 🛡️ **Security Features**
-- Reentrancy protection
-- Deadline checks for transaction expiration
-- Safe math operations with Solmate
-- Integer overflow protection
+```mermaid
+sequenceDiagram
+    participant T as Trader
+    participant R as Router
+    participant P as Pair
+    T->>R: swapExactTokensForTokens
+    R->>P: fund pair (pull input)
+    R->>P: swap(out) — output sent first
+    P->>P: K check (0.3% fee)
+    P->>P: update reserves + TWAP cumulatives
+```
 
-## Technology Stack
-
-- **Solidity** ^0.8.0 - Smart contract development
-- **Foundry** - Development framework and testing
-- **Solmate** - Gas-optimized contract libraries
-- **OpenZeppelin** - Security standards
-
-
-## Installation
+## Quickstart
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd swap
-
-# Install dependencies
-forge install
-
-# Build contracts
 forge build
+forge test                                         # 119 tests, all green
+forge test --match-path 'test/exploits/*' -vvv     # attacks blocked (15/15)
+FOUNDRY_PROFILE=ci forge test                      # 5000 fuzz / 1000 invariant runs
+forge coverage --ir-minimum --report summary       # ~97% lines on src/
+make snapshot && make lint
 ```
 
-## Testing
+## Security properties and limitations
+
+- Oracle: 1,024-observation ring, 5-minute cadence, 1-hour freshness,
+  15-minute minimum / ~85-hour maximum TWAP, fail-closed guard, factory
+  provenance. `consult` returns Q112.112 raw units; use `consultScaled*`.
+- `getSpotPriceUnsafe` is manipulable within a block — never back credit.
+- Fee-on-transfer/rebasing tokens are NOT supported (failure modes pinned).
+- Sandwiches are profitable on-chain: use `amountOutMin` + deadlines.
+- No admin keys, no upgradeability, no protocol fee, no mainnet deployment.
+
+## Reproduce the audit
+
+1. Read [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) (assets, actors, abuse cases).
+2. Run the exploits: `forge test --match-path 'test/exploits/*' -vvv`.
+3. Compare pre-fix evidence: `docs/evidence/phase1-pre-fix-exploits.log`
+   (7 secure-expectation tests fail, 2 theft demos succeed on the old tree).
+4. Read findings: [`docs/AUDIT_REPORT.md`](docs/AUDIT_REPORT.md) (every High
+   links code + PoC + fix + regression test + residual risk).
+5. Check gates: invariants (`test/Invariant.t.sol`), fuzz
+   (`test/SwapFuzz.t.sol`, independent `AmmMathRef`), coverage, gas snapshot.
+
+## Deploy (local / testnet only)
 
 ```bash
-# Run all tests
-forge test
-
-# Run tests with verbosity
-forge test -vvv
-
-# Run specific test file
-forge test --match-path test/Swap.t.sol
-
-# Run fuzz tests
-forge test --match-path test/SwapFuzz.t.sol
-
-# Run with gas reporting
-forge test --gas-report
+cp .env.example .env          # fill PRIVATE_KEY, WETH_ADDRESS (non-local), ROUTER_ADDRESS...
+forge script script/Deploy.s.sol            # infra only; refuses silent signers
+forge script script/SeedLocal.s.sol         # testnet seeding; refuses mainnet
 ```
 
-## Deployment
+## License
 
-```bash
-# Deploy to local network
-forge script script/Deploy.s.sol --fork-url http://localhost:8545 --broadcast
-
-# Deploy to testnet
-forge script script/Deploy.s.sol --rpc-url <RPC_URL> --private-key <PRIVATE_KEY> --broadcast --verify
-```
-
+MIT — see [LICENSE](LICENSE).

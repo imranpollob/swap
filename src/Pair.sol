@@ -31,12 +31,7 @@ contract Pair is ERC20 {
     }
 
     event Mint(address indexed sender, uint amount0, uint amount1);
-    event Burn(
-        address indexed sender,
-        uint amount0,
-        uint amount1,
-        address indexed to
-    );
+    event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
     event Swap(
         address indexed sender,
         uint amount0In,
@@ -53,18 +48,31 @@ contract Pair is ERC20 {
 
     function initialize(address _token0, address _token1) external {
         require(msg.sender == factory, "Pair: FORBIDDEN");
+        require(token0 == address(0) && token1 == address(0), "Pair: ALREADY_INITIALIZED");
         token0 = _token0;
         token1 = _token1;
     }
 
+    /**
+     * @notice Current reserves. Reverts while the pair is mid-operation.
+     * @dev Blocks read-only reentrancy: a token callback during swap/burn
+     * cannot observe stale reserves. `balanceOf` and the public cumulative
+     * getters remain readable mid-callback; integrators must not price off
+     * them either — use the TWAP oracle.
+     */
     function getReserves()
         public
         view
-        returns (
-            uint112 _reserve0,
-            uint112 _reserve1,
-            uint32 _blockTimestampLast
-        )
+        returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast)
+    {
+        require(unlocked == 1, "Pair: LOCKED");
+        (_reserve0, _reserve1, _blockTimestampLast) = _getReserves();
+    }
+
+    function _getReserves()
+        internal
+        view
+        returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast)
     {
         _reserve0 = reserve0;
         _reserve1 = reserve1;
@@ -74,27 +82,15 @@ contract Pair is ERC20 {
     uint public price0CumulativeLast;
     uint public price1CumulativeLast;
 
-    function _update(
-        uint balance0,
-        uint balance1,
-        uint112 _reserve0,
-        uint112 _reserve1
-    ) private {
-        require(
-            balance0 <= type(uint112).max && balance1 <= type(uint112).max,
-            "Pair: OVERFLOW"
-        );
+    function _update(uint balance0, uint balance1, uint112 _reserve0, uint112 _reserve1) private {
+        require(balance0 <= type(uint112).max && balance1 <= type(uint112).max, "Pair: OVERFLOW");
         uint32 blockTimestamp = uint32(block.timestamp);
         uint32 timeElapsed = blockTimestamp - blockTimestampLast;
         if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
             // * never overflows, and + overflow is desired
             unchecked {
-                price0CumulativeLast +=
-                    uint((uint(_reserve1) << 112) / _reserve0) *
-                    timeElapsed;
-                price1CumulativeLast +=
-                    uint((uint(_reserve0) << 112) / _reserve1) *
-                    timeElapsed;
+                price0CumulativeLast += uint((uint(_reserve1) << 112) / _reserve0) * timeElapsed;
+                price1CumulativeLast += uint((uint(_reserve0) << 112) / _reserve1) * timeElapsed;
             }
         }
         reserve0 = uint112(balance0);
@@ -104,22 +100,23 @@ contract Pair is ERC20 {
     }
 
     function mint(address to) external lock returns (uint liquidity) {
-        (uint112 _reserve0, uint112 _reserve1, ) = getReserves();
+        (uint112 _reserve0, uint112 _reserve1,) = _getReserves();
         uint balance0 = ERC20(token0).balanceOf(address(this));
         uint balance1 = ERC20(token1).balanceOf(address(this));
         uint amount0 = balance0 - _reserve0;
         uint amount1 = balance1 - _reserve1;
+        // Bound the multiplication below: amounts above uint112 cannot be
+        // absorbed (see _update's OVERFLOW check) and would overflow sqrt/addLiquidity math.
+        require(amount0 <= type(uint112).max && amount1 <= type(uint112).max, "Pair: OVERFLOW");
 
         if (totalSupply == 0) {
-            liquidity =
-                FixedPointMathLib.sqrt(amount0 * amount1) -
-                MINIMUM_LIQUIDITY;
+            uint256 root = FixedPointMathLib.sqrt(amount0 * amount1);
+            require(root > MINIMUM_LIQUIDITY, "Pair: INSUFFICIENT_INITIAL_LIQUIDITY");
+            liquidity = root - MINIMUM_LIQUIDITY;
             _mint(address(0), MINIMUM_LIQUIDITY);
         } else {
-            liquidity = min(
-                (amount0 * totalSupply) / _reserve0,
-                (amount1 * totalSupply) / _reserve1
-            );
+            liquidity =
+                min((amount0 * totalSupply) / _reserve0, (amount1 * totalSupply) / _reserve1);
         }
         require(liquidity > 0, "Pair: INSUFFICIENT_LIQUIDITY_MINTED");
         _mint(to, liquidity);
@@ -128,10 +125,8 @@ contract Pair is ERC20 {
         emit Mint(msg.sender, amount0, amount1);
     }
 
-    function burn(
-        address to
-    ) external lock returns (uint amount0, uint amount1) {
-        (uint112 _reserve0, uint112 _reserve1, ) = getReserves();
+    function burn(address to) external lock returns (uint amount0, uint amount1) {
+        (uint112 _reserve0, uint112 _reserve1,) = _getReserves();
         address _token0 = token0;
         address _token1 = token1;
         uint balance0 = ERC20(_token0).balanceOf(address(this));
@@ -140,10 +135,7 @@ contract Pair is ERC20 {
 
         amount0 = (liquidity * balance0) / totalSupply;
         amount1 = (liquidity * balance1) / totalSupply;
-        require(
-            amount0 > 0 && amount1 > 0,
-            "Pair: INSUFFICIENT_LIQUIDITY_BURNED"
-        );
+        require(amount0 > 0 && amount1 > 0, "Pair: INSUFFICIENT_LIQUIDITY_BURNED");
 
         _burn(address(this), liquidity);
         ERC20(_token0).safeTransfer(to, amount0);
@@ -156,21 +148,12 @@ contract Pair is ERC20 {
         emit Burn(msg.sender, amount0, amount1, to);
     }
 
-    function swap(
-        uint amount0Out,
-        uint amount1Out,
-        address to,
-        bytes calldata /* data */
-    ) external lock {
-        require(
-            amount0Out > 0 || amount1Out > 0,
-            "Pair: INSUFFICIENT_OUTPUT_AMOUNT"
-        );
-        (uint112 _reserve0, uint112 _reserve1, ) = getReserves();
-        require(
-            amount0Out < _reserve0 && amount1Out < _reserve1,
-            "Pair: INSUFFICIENT_LIQUIDITY"
-        );
+    // NOTE: no flash-swap callback (the unused `data` parameter was removed);
+    // `to` receives output tokens before paying input tokens in.
+    function swap(uint amount0Out, uint amount1Out, address to) external lock {
+        require(amount0Out > 0 || amount1Out > 0, "Pair: INSUFFICIENT_OUTPUT_AMOUNT");
+        (uint112 _reserve0, uint112 _reserve1,) = _getReserves();
+        require(amount0Out < _reserve0 && amount1Out < _reserve1, "Pair: INSUFFICIENT_LIQUIDITY");
 
         uint balance0;
         uint balance1;
@@ -185,23 +168,15 @@ contract Pair is ERC20 {
             balance1 = ERC20(_token1).balanceOf(address(this));
         }
 
-        uint amount0In = balance0 > _reserve0 - amount0Out
-            ? balance0 - (_reserve0 - amount0Out)
-            : 0;
-        uint amount1In = balance1 > _reserve1 - amount1Out
-            ? balance1 - (_reserve1 - amount1Out)
-            : 0;
-        require(
-            amount0In > 0 || amount1In > 0,
-            "Pair: INSUFFICIENT_INPUT_AMOUNT"
-        );
+        uint amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;
+        uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
+        require(amount0In > 0 || amount1In > 0, "Pair: INSUFFICIENT_INPUT_AMOUNT");
 
         {
             uint balance0Adjusted = balance0 * 1000 - amount0In * 3;
             uint balance1Adjusted = balance1 * 1000 - amount1In * 3;
             require(
-                balance0Adjusted * balance1Adjusted >=
-                    uint(_reserve0) * _reserve1 * 1000 ** 2,
+                balance0Adjusted * balance1Adjusted >= uint(_reserve0) * _reserve1 * 1000 ** 2,
                 "Pair: K"
             );
         }
@@ -213,14 +188,8 @@ contract Pair is ERC20 {
     function skim(address to) external lock {
         address _token0 = token0;
         address _token1 = token1;
-        ERC20(_token0).safeTransfer(
-            to,
-            ERC20(_token0).balanceOf(address(this)) - reserve0
-        );
-        ERC20(_token1).safeTransfer(
-            to,
-            ERC20(_token1).balanceOf(address(this)) - reserve1
-        );
+        ERC20(_token0).safeTransfer(to, ERC20(_token0).balanceOf(address(this)) - reserve0);
+        ERC20(_token1).safeTransfer(to, ERC20(_token1).balanceOf(address(this)) - reserve1);
     }
 
     function sync() external lock {

@@ -1,0 +1,5 @@
+{
+  "filter_paths": "(lib/|test/|script/|src/test/)",
+  "exclude_dependencies": true,
+  "compile_force_framework": "foundry"
+}

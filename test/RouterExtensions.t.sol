@@ -21,7 +21,7 @@ contract RouterExtensionsTest is Test {
 
     address user = address(0x1234);
 
-    receive() external payable {}
+    receive() external payable { }
 
     function setUp() public {
         weth = new WETH9();
@@ -40,7 +40,7 @@ contract RouterExtensionsTest is Test {
         tokenA.approve(address(router), type(uint256).max);
 
         // Create and fund pool with initial liquidity
-        weth.deposit{value: 100 ether}();
+        weth.deposit{ value: 100 ether }();
         weth.approve(address(router), type(uint256).max);
 
         router.addLiquidity(
@@ -80,7 +80,7 @@ contract RouterExtensionsTest is Test {
         tokenB.approve(address(router), type(uint256).max);
 
         // Need more WETH for second pool
-        weth.deposit{value: 100 ether}();
+        weth.deposit{ value: 100 ether }();
 
         router.addLiquidity(
             address(tokenB),
@@ -121,19 +121,11 @@ contract RouterExtensionsTest is Test {
         uint256 wethBefore = weth.balanceOf(address(this));
 
         router.swapTokensForExactTokens(
-            amountOut,
-            amountInMax,
-            path,
-            address(this),
-            block.timestamp
+            amountOut, amountInMax, path, address(this), block.timestamp
         );
 
         uint256 wethAfter = weth.balanceOf(address(this));
-        assertEq(
-            wethAfter - wethBefore,
-            amountOut,
-            "Should receive exact output"
-        );
+        assertEq(wethAfter - wethBefore, amountOut, "Should receive exact output");
     }
 
     function testRevert_SwapTokensForExactTokens_ExcessiveInput() public {
@@ -145,13 +137,7 @@ contract RouterExtensionsTest is Test {
         uint256 tooLowMax = 1 * 10 ** 18; // Way too low
 
         vm.expectRevert("Router: EXCESSIVE_INPUT_AMOUNT");
-        router.swapTokensForExactTokens(
-            amountOut,
-            tooLowMax,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapTokensForExactTokens(amountOut, tooLowMax, path, address(this), block.timestamp);
     }
 
     // ============ addLiquidityETH TESTS ============
@@ -163,8 +149,9 @@ contract RouterExtensionsTest is Test {
 
         uint256 ethBefore = address(this).balance;
 
-        (uint256 amountToken, uint256 amountETH, uint256 liquidity) = router
-            .addLiquidityETH{value: 10 ether}(
+        (uint256 amountToken, uint256 amountETH, uint256 liquidity) = router.addLiquidityETH{
+            value: 10 ether
+        }(
             address(tokenB),
             1000 * 10 ** 18, // 1000 tokens
             0,
@@ -176,11 +163,7 @@ contract RouterExtensionsTest is Test {
         assertGt(amountToken, 0, "Should use tokens");
         assertGt(amountETH, 0, "Should use ETH");
         assertGt(liquidity, 0, "Should receive LP tokens");
-        assertEq(
-            address(this).balance,
-            ethBefore - amountETH,
-            "Should use correct ETH"
-        );
+        assertEq(address(this).balance, ethBefore - amountETH, "Should use correct ETH");
     }
 
     function test_AddLiquidityETH_RefundsExcess() public {
@@ -189,19 +172,14 @@ contract RouterExtensionsTest is Test {
         tokenB.approve(address(router), type(uint256).max);
 
         // First add liquidity to set price
-        router.addLiquidityETH{value: 10 ether}(
-            address(tokenB),
-            1000 * 10 ** 18,
-            0,
-            0,
-            address(this),
-            block.timestamp
+        router.addLiquidityETH{ value: 10 ether }(
+            address(tokenB), 1000 * 10 ** 18, 0, 0, address(this), block.timestamp
         );
 
         // Add more with excess ETH
         uint256 ethBefore = address(this).balance;
 
-        router.addLiquidityETH{value: 20 ether}( // Send way more than needed
+        router.addLiquidityETH{ value: 20 ether }( // Send way more than needed
             address(tokenB),
             100 * 10 ** 18, // Only 100 tokens
             0,
@@ -224,19 +202,12 @@ contract RouterExtensionsTest is Test {
 
         uint256 tokensBefore = tokenA.balanceOf(address(this));
 
-        uint256[] memory amounts = router.swapExactETHForTokens{value: 1 ether}(
-            0,
-            path,
-            address(this),
-            block.timestamp
+        uint256[] memory amounts = router.swapExactETHForTokens{ value: 1 ether }(
+            0, path, address(this), block.timestamp
         );
 
         uint256 tokensAfter = tokenA.balanceOf(address(this));
-        assertEq(
-            tokensAfter - tokensBefore,
-            amounts[1],
-            "Should receive calculated amount"
-        );
+        assertEq(tokensAfter - tokensBefore, amounts[1], "Should receive calculated amount");
         assertGt(amounts[1], 0, "Should receive tokens");
     }
 
@@ -246,12 +217,7 @@ contract RouterExtensionsTest is Test {
         path[1] = address(weth);
 
         vm.expectRevert("Router: INVALID_PATH");
-        router.swapExactETHForTokens{value: 1 ether}(
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactETHForTokens{ value: 1 ether }(0, path, address(this), block.timestamp);
     }
 
     // ============ swapExactTokensForETH TESTS ============
@@ -264,20 +230,11 @@ contract RouterExtensionsTest is Test {
         uint256 ethBefore = address(this).balance;
         uint256 amountIn = 100 * 10 ** 18;
 
-        uint256[] memory amounts = router.swapExactTokensForETH(
-            amountIn,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        uint256[] memory amounts =
+            router.swapExactTokensForETH(amountIn, 0, path, address(this), block.timestamp);
 
         uint256 ethAfter = address(this).balance;
-        assertEq(
-            ethAfter - ethBefore,
-            amounts[1],
-            "Should receive calculated ETH"
-        );
+        assertEq(ethAfter - ethBefore, amounts[1], "Should receive calculated ETH");
         assertGt(amounts[1], 0, "Should receive ETH");
     }
 
@@ -292,16 +249,12 @@ contract RouterExtensionsTest is Test {
         uint256 ethBefore = address(this).balance;
         uint256 tokensBefore = tokenA.balanceOf(address(this));
 
-        uint256[] memory amounts = router.swapETHForExactTokens{
-            value: 10 ether
-        }(exactTokensOut, path, address(this), block.timestamp);
+        uint256[] memory amounts = router.swapETHForExactTokens{ value: 10 ether }(
+            exactTokensOut, path, address(this), block.timestamp
+        );
 
         uint256 tokensAfter = tokenA.balanceOf(address(this));
-        assertEq(
-            tokensAfter - tokensBefore,
-            exactTokensOut,
-            "Should receive exact tokens"
-        );
+        assertEq(tokensAfter - tokensBefore, exactTokensOut, "Should receive exact tokens");
 
         // Check refund worked (shouldn't use all 10 ETH)
         uint256 ethUsed = ethBefore - address(this).balance;
@@ -319,11 +272,7 @@ contract RouterExtensionsTest is Test {
         uint256 ethBefore = address(this).balance;
 
         router.swapTokensForExactETH(
-            exactETHOut,
-            type(uint256).max,
-            path,
-            address(this),
-            block.timestamp
+            exactETHOut, type(uint256).max, path, address(this), block.timestamp
         );
 
         uint256 ethAfter = address(this).balance;
@@ -338,13 +287,8 @@ contract RouterExtensionsTest is Test {
         tokenB.mint(address(this), 10_000 * 10 ** 18);
         tokenB.approve(address(router), type(uint256).max);
 
-        (, , uint256 liquidity) = router.addLiquidityETH{value: 10 ether}(
-            address(tokenB),
-            1000 * 10 ** 18,
-            0,
-            0,
-            address(this),
-            block.timestamp
+        (,, uint256 liquidity) = router.addLiquidityETH{ value: 10 ether }(
+            address(tokenB), 1000 * 10 ** 18, 0, 0, address(this), block.timestamp
         );
 
         // Approve and remove
@@ -356,12 +300,7 @@ contract RouterExtensionsTest is Test {
         uint256 tokensBefore = tokenB.balanceOf(address(this));
 
         (uint256 amountToken, uint256 amountETH) = router.removeLiquidityETH(
-            address(tokenB),
-            liquidity,
-            0,
-            0,
-            address(this),
-            block.timestamp
+            address(tokenB), liquidity, 0, 0, address(this), block.timestamp
         );
 
         assertGt(amountToken, 0, "Should receive tokens");
@@ -371,10 +310,23 @@ contract RouterExtensionsTest is Test {
             tokensBefore + amountToken,
             "Token balance should increase"
         );
-        assertEq(
-            address(this).balance,
-            ethBefore + amountETH,
-            "ETH balance should increase"
-        );
+        assertEq(address(this).balance, ethBefore + amountETH, "ETH balance should increase");
+    }
+
+    // ============ R-02 / R-04 ROBUSTNESS ============
+
+    function test_Revert_ReceiveDirectETH() public {
+        // Only the WETH contract may send ETH to the router.
+        (bool ok,) = address(router).call{ value: 1 ether }("");
+        assertFalse(ok, "R-02: direct ETH must be rejected");
+    }
+
+    function test_Revert_GetAmountInExceedsReserves() public {
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(weth);
+        // Pool holds 100 ETH; requesting 1000 must revert with a reason.
+        vm.expectRevert("Router: INSUFFICIENT_LIQUIDITY");
+        router.getAmountsIn(1000 ether, path);
     }
 }

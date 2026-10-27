@@ -1,0 +1,10 @@
+
+== Logs ==
+  Deployer: 0xCf03Dd0a894Ef79CB5b601A43C4b25E3Ae4c67eD
+  Chain ID: 31337
+  WETH: 0x059BD45580a3efD6797de07535db5dBA190036d9
+  Factory: 0x61b59aCc511F03443DA29CdD78C87f3eFEf32687
+  Router: 0x9db97E104c2eE9B824313783fA7661d81dD6bC30
+  Oracle: 0xD0Cd8c69787d7EA04fBc76f254dD5B78D264316e
+
+If you wish to simulate on-chain transactions pass a RPC URL.

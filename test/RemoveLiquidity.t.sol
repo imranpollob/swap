@@ -47,7 +47,7 @@ contract RemoveLiquidityTest is Test {
         tokenA.approve(address(router), type(uint256).max);
         tokenB.approve(address(router), type(uint256).max);
 
-        (, , liquidity) = router.addLiquidity(
+        (,, liquidity) = router.addLiquidity(
             address(tokenA),
             address(tokenB),
             10_000 * 10 ** 18,
@@ -75,34 +75,16 @@ contract RemoveLiquidityTest is Test {
         pair.approve(address(router), lpBalance);
 
         (uint256 amountA, uint256 amountB) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            lpBalance,
-            0,
-            0,
-            lp1,
-            block.timestamp
+            address(tokenA), address(tokenB), lpBalance, 0, 0, lp1, block.timestamp
         );
         vm.stopPrank();
 
         // Should get back approximately initial deposit (minus MINIMUM_LIQUIDITY)
         assertGt(amountA, 0, "Should receive tokenA");
         assertGt(amountB, 0, "Should receive tokenB");
-        assertEq(
-            pair.balanceOf(lp1),
-            0,
-            "LP should have no remaining LP tokens"
-        );
-        assertEq(
-            tokenA.balanceOf(lp1),
-            tokenABefore + amountA,
-            "TokenA balance should increase"
-        );
-        assertEq(
-            tokenB.balanceOf(lp1),
-            tokenBBefore + amountB,
-            "TokenB balance should increase"
-        );
+        assertEq(pair.balanceOf(lp1), 0, "LP should have no remaining LP tokens");
+        assertEq(tokenA.balanceOf(lp1), tokenABefore + amountA, "TokenA balance should increase");
+        assertEq(tokenB.balanceOf(lp1), tokenBBefore + amountB, "TokenB balance should increase");
     }
 
     // ============ PARTIAL REMOVAL TESTS ============
@@ -117,22 +99,12 @@ contract RemoveLiquidityTest is Test {
         uint256 lpBefore = pair.balanceOf(lp1);
 
         (uint256 amountA, uint256 amountB) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            removeAmount,
-            0,
-            0,
-            lp1,
-            block.timestamp
+            address(tokenA), address(tokenB), removeAmount, 0, 0, lp1, block.timestamp
         );
         vm.stopPrank();
 
         // Should have half LP tokens remaining
-        assertEq(
-            pair.balanceOf(lp1),
-            lpBefore - removeAmount,
-            "Should have half LP remaining"
-        );
+        assertEq(pair.balanceOf(lp1), lpBefore - removeAmount, "Should have half LP remaining");
         assertGt(amountA, 0, "Should receive tokenA");
         assertGt(amountB, 0, "Should receive tokenB");
     }
@@ -150,13 +122,7 @@ contract RemoveLiquidityTest is Test {
         // Remove in 4 chunks
         for (uint i = 0; i < 4; i++) {
             (uint256 amountA, uint256 amountB) = router.removeLiquidity(
-                address(tokenA),
-                address(tokenB),
-                removePerTx,
-                0,
-                0,
-                lp1,
-                block.timestamp
+                address(tokenA), address(tokenB), removePerTx, 0, 0, lp1, block.timestamp
             );
             totalA += amountA;
             totalB += amountB;
@@ -174,7 +140,7 @@ contract RemoveLiquidityTest is Test {
         uint256 lpBalance = _setupPoolWithLP1();
 
         // Get initial values
-        (uint112 reserve0Pre, uint112 reserve1Pre, ) = pair.getReserves();
+        (uint112 reserve0Pre, uint112 reserve1Pre,) = pair.getReserves();
         uint256 kPre = uint256(reserve0Pre) * uint256(reserve1Pre);
 
         // Trader performs swaps (generates fees)
@@ -192,25 +158,13 @@ contract RemoveLiquidityTest is Test {
 
         // Multiple swaps to accumulate fees
         for (uint i = 0; i < 10; i++) {
-            router.swapExactTokensForTokens(
-                100 * 10 ** 18,
-                0,
-                pathAtoB,
-                trader,
-                block.timestamp
-            );
-            router.swapExactTokensForTokens(
-                100 * 10 ** 18,
-                0,
-                pathBtoA,
-                trader,
-                block.timestamp
-            );
+            router.swapExactTokensForTokens(100 * 10 ** 18, 0, pathAtoB, trader, block.timestamp);
+            router.swapExactTokensForTokens(100 * 10 ** 18, 0, pathBtoA, trader, block.timestamp);
         }
         vm.stopPrank();
 
         // K should have increased from fees
-        (uint112 reserve0Post, uint112 reserve1Post, ) = pair.getReserves();
+        (uint112 reserve0Post, uint112 reserve1Post,) = pair.getReserves();
         uint256 kPost = uint256(reserve0Post) * uint256(reserve1Post);
         assertGt(kPost, kPre, "K should increase from fees");
 
@@ -219,29 +173,15 @@ contract RemoveLiquidityTest is Test {
         pair.approve(address(router), lpBalance);
 
         (uint256 amountA, uint256 amountB) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            lpBalance,
-            0,
-            0,
-            lp1,
-            block.timestamp
+            address(tokenA), address(tokenB), lpBalance, 0, 0, lp1, block.timestamp
         );
         vm.stopPrank();
 
         // LP should get more than initial due to fees (accounting for MINIMUM_LIQUIDITY)
         // Note: Due to MINIMUM_LIQUIDITY lock, exact comparison is tricky
         // But we can verify amounts are substantial
-        assertGt(
-            amountA,
-            9_900 * 10 ** 18,
-            "Should get back substantial tokenA"
-        );
-        assertGt(
-            amountB,
-            9_900 * 10 ** 18,
-            "Should get back substantial tokenB"
-        );
+        assertGt(amountA, 9_900 * 10 ** 18, "Should get back substantial tokenA");
+        assertGt(amountB, 9_900 * 10 ** 18, "Should get back substantial tokenB");
     }
 
     // ============ MULTIPLE LP TESTS ============
@@ -287,53 +227,26 @@ contract RemoveLiquidityTest is Test {
         uint256 lp2Balance = pair.balanceOf(lp2);
 
         // LP2 should have ~half the LP tokens of LP1
-        assertApproxEqRel(
-            lp2Balance,
-            lp1Balance / 2,
-            0.01e18,
-            "LP2 should have half LP1's tokens"
-        );
+        assertApproxEqRel(lp2Balance, lp1Balance / 2, 0.01e18, "LP2 should have half LP1's tokens");
 
         // Both remove liquidity
         vm.startPrank(lp1);
         pair.approve(address(router), lp1Balance);
         (uint256 amount1A, uint256 amount1B) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            lp1Balance,
-            0,
-            0,
-            lp1,
-            block.timestamp
+            address(tokenA), address(tokenB), lp1Balance, 0, 0, lp1, block.timestamp
         );
         vm.stopPrank();
 
         vm.startPrank(lp2);
         pair.approve(address(router), lp2Balance);
         (uint256 amount2A, uint256 amount2B) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            lp2Balance,
-            0,
-            0,
-            lp2,
-            block.timestamp
+            address(tokenA), address(tokenB), lp2Balance, 0, 0, lp2, block.timestamp
         );
         vm.stopPrank();
 
         // LP1 should get ~2x what LP2 gets
-        assertApproxEqRel(
-            amount1A,
-            amount2A * 2,
-            0.01e18,
-            "LP1 should get ~2x tokenA"
-        );
-        assertApproxEqRel(
-            amount1B,
-            amount2B * 2,
-            0.01e18,
-            "LP1 should get ~2x tokenB"
-        );
+        assertApproxEqRel(amount1A, amount2A * 2, 0.01e18, "LP1 should get ~2x tokenA");
+        assertApproxEqRel(amount1B, amount2B * 2, 0.01e18, "LP1 should get ~2x tokenB");
     }
 
     // ============ IMBALANCED POOL REMOVAL ============
@@ -349,17 +262,11 @@ contract RemoveLiquidityTest is Test {
         path[0] = address(tokenA);
         path[1] = address(tokenB);
 
-        router.swapExactTokensForTokens(
-            5_000 * 10 ** 18,
-            0,
-            path,
-            trader,
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(5_000 * 10 ** 18, 0, path, trader, block.timestamp);
         vm.stopPrank();
 
         // Check pool is imbalanced
-        (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
+        (uint112 reserve0, uint112 reserve1,) = pair.getReserves();
         assertGt(reserve0, reserve1, "Pool should be imbalanced");
 
         // LP removes liquidity
@@ -367,13 +274,7 @@ contract RemoveLiquidityTest is Test {
         pair.approve(address(router), lpBalance);
 
         (uint256 amountA, uint256 amountB) = router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            lpBalance,
-            0,
-            0,
-            lp1,
-            block.timestamp
+            address(tokenA), address(tokenB), lpBalance, 0, 0, lp1, block.timestamp
         );
         vm.stopPrank();
 
@@ -388,7 +289,7 @@ contract RemoveLiquidityTest is Test {
         uint256 removeAmount = lpBalance / 2;
 
         // Calculate expected amounts
-        (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
+        (uint112 reserve0, uint112 reserve1,) = pair.getReserves();
         uint256 totalSupply = pair.totalSupply();
 
         // Determine which token is which
@@ -468,13 +369,7 @@ contract RemoveLiquidityTest is Test {
 
         uint256 gasStart = gasleft();
         router.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            lpBalance,
-            0,
-            0,
-            lp1,
-            block.timestamp
+            address(tokenA), address(tokenB), lpBalance, 0, 0, lp1, block.timestamp
         );
         uint256 gasUsed = gasStart - gasleft();
         vm.stopPrank();

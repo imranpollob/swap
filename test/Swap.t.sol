@@ -45,7 +45,7 @@ contract SwapTest is Test {
         address pairAddress = factory.getPair(address(tokenA), address(tokenB));
         Pair pair = Pair(pairAddress);
 
-        (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
+        (uint112 reserve0, uint112 reserve1,) = pair.getReserves();
         assertEq(reserve0, 100 * 10 ** 18);
         assertEq(reserve1, 100 * 10 ** 18);
         assertGt(pair.totalSupply(), 0);
@@ -75,18 +75,14 @@ contract SwapTest is Test {
         uint balanceBefore = tokenB.balanceOf(address(this));
 
         router.swapExactTokensForTokens(
-            amountIn,
-            amountOutMin,
-            path,
-            address(this),
-            block.timestamp
+            amountIn, amountOutMin, path, address(this), block.timestamp
         );
 
         uint balanceAfter = tokenB.balanceOf(address(this));
         assertEq(balanceAfter - balanceBefore, amounts[1]);
     }
 
-    function testFailSwapExpired() public {
+    function test_Revert_SwapExpired() public {
         // Add liquidity first
         router.addLiquidity(
             address(tokenA),
@@ -103,6 +99,7 @@ contract SwapTest is Test {
         path[0] = address(tokenA);
         path[1] = address(tokenB);
 
+        vm.expectRevert("Router: EXPIRED");
         router.swapExactTokensForTokens(
             1 * 10 ** 18,
             0,

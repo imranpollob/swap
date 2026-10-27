@@ -111,21 +111,11 @@ contract MultiHopTest is Test {
 
         uint256 balanceBefore = tokenC.balanceOf(address(this));
 
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(amountIn, 0, path, address(this), block.timestamp);
 
         uint256 balanceAfter = tokenC.balanceOf(address(this));
 
-        assertEq(
-            balanceAfter - balanceBefore,
-            amounts[2],
-            "Should receive expected amount"
-        );
+        assertEq(balanceAfter - balanceBefore, amounts[2], "Should receive expected amount");
         assertGt(amounts[2], 0, "Should receive tokens");
     }
 
@@ -144,21 +134,11 @@ contract MultiHopTest is Test {
 
         uint256 balanceBefore = tokenD.balanceOf(address(this));
 
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(amountIn, 0, path, address(this), block.timestamp);
 
         uint256 balanceAfter = tokenD.balanceOf(address(this));
 
-        assertEq(
-            balanceAfter - balanceBefore,
-            amounts[3],
-            "Should receive expected amount"
-        );
+        assertEq(balanceAfter - balanceBefore, amounts[3], "Should receive expected amount");
     }
 
     // ============ PATH EFFICIENCY TESTS ============
@@ -172,27 +152,17 @@ contract MultiHopTest is Test {
         address[] memory directPath = new address[](2);
         directPath[0] = address(tokenA);
         directPath[1] = address(tokenC);
-        uint256[] memory directAmounts = router.getAmountsOut(
-            amountIn,
-            directPath
-        );
+        uint256[] memory directAmounts = router.getAmountsOut(amountIn, directPath);
 
         // Indirect path: A -> B -> C
         address[] memory indirectPath = new address[](3);
         indirectPath[0] = address(tokenA);
         indirectPath[1] = address(tokenB);
         indirectPath[2] = address(tokenC);
-        uint256[] memory indirectAmounts = router.getAmountsOut(
-            amountIn,
-            indirectPath
-        );
+        uint256[] memory indirectAmounts = router.getAmountsOut(amountIn, indirectPath);
 
         // Direct path should be more efficient (fewer fees)
-        assertGt(
-            directAmounts[1],
-            indirectAmounts[2],
-            "Direct path should yield more output"
-        );
+        assertGt(directAmounts[1], indirectAmounts[2], "Direct path should yield more output");
     }
 
     function test_MultiHop_FeesCompound() public {
@@ -225,16 +195,8 @@ contract MultiHopTest is Test {
         uint256 efficiency3 = (amounts3[2] * 10000) / amountIn;
         uint256 efficiency4 = (amounts4[3] * 10000) / amountIn;
 
-        assertGt(
-            efficiency2,
-            efficiency3,
-            "2-hop should be more efficient than 3-hop"
-        );
-        assertGt(
-            efficiency3,
-            efficiency4,
-            "3-hop should be more efficient than 4-hop"
-        );
+        assertGt(efficiency2, efficiency3, "2-hop should be more efficient than 3-hop");
+        assertGt(efficiency3, efficiency4, "3-hop should be more efficient than 4-hop");
     }
 
     // ============ INTERMEDIATE AMOUNTS TESTS ============
@@ -257,11 +219,7 @@ contract MultiHopTest is Test {
         path1[1] = address(tokenB);
         uint256[] memory amounts1 = router.getAmountsOut(amountIn, path1);
 
-        assertEq(
-            amounts[1],
-            amounts1[1],
-            "Intermediate amount should match direct A->B"
-        );
+        assertEq(amounts[1], amounts1[1], "Intermediate amount should match direct A->B");
 
         // Get expected output of B->C using intermediate amount
         address[] memory path2 = new address[](2);
@@ -319,25 +277,18 @@ contract MultiHopTest is Test {
         uint256 amountIn = 1000 * 10 ** 18;
         uint256 balanceBefore = tokenA.balanceOf(address(this));
 
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(amountIn, 0, path, address(this), block.timestamp);
 
         uint256 balanceAfter = tokenA.balanceOf(address(this));
 
         // Calculate profit/loss safely
         int256 netChange = int256(balanceAfter) - int256(balanceBefore);
 
-        // Due to fees, circular swap typically results in loss
-        // Unless arbitrage opportunity exists
-        emit log_named_int(
-            "Net change from circular swap (negative = loss)",
-            netChange
-        );
+        // Fees compound on every hop, so a circular swap with no true
+        // price discrepancy must lose money. (A profitable loop would be
+        // a real arbitrage signal, not test noise.)
+        emit log_named_int("Net change from circular swap", netChange);
+        assertLt(netChange, int256(0), "circular swap must lose to fees");
     }
 
     // ============ REVERSE PATH TESTS ============
@@ -356,13 +307,7 @@ contract MultiHopTest is Test {
         uint256 balanceABefore = tokenA.balanceOf(address(this));
         uint256 balanceCBefore = tokenC.balanceOf(address(this));
 
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            forwardPath,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(amountIn, 0, forwardPath, address(this), block.timestamp);
 
         uint256 cReceived = tokenC.balanceOf(address(this)) - balanceCBefore;
 
@@ -372,23 +317,12 @@ contract MultiHopTest is Test {
         reversePath[1] = address(tokenB);
         reversePath[2] = address(tokenA);
 
-        router.swapExactTokensForTokens(
-            cReceived,
-            0,
-            reversePath,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(cReceived, 0, reversePath, address(this), block.timestamp);
 
-        uint256 aReceived = tokenA.balanceOf(address(this)) -
-            (balanceABefore - amountIn);
+        uint256 aReceived = tokenA.balanceOf(address(this)) - (balanceABefore - amountIn);
 
         // Should get less than original due to fees (round trip loss)
-        assertLt(
-            aReceived,
-            amountIn,
-            "Round trip should result in loss due to fees"
-        );
+        assertLt(aReceived, amountIn, "Round trip should result in loss due to fees");
     }
 
     // ============ SLIPPAGE IN MULTI-HOP ============
@@ -409,11 +343,7 @@ contract MultiHopTest is Test {
 
         vm.expectRevert("Router: INSUFFICIENT_OUTPUT_AMOUNT");
         router.swapExactTokensForTokens(
-            amountIn,
-            impossibleMin,
-            path,
-            address(this),
-            block.timestamp
+            amountIn, impossibleMin, path, address(this), block.timestamp
         );
     }
 
@@ -438,64 +368,16 @@ contract MultiHopTest is Test {
         uint256 largeEfficiency = (largeAmounts[2] * 10000) / largeAmount;
 
         // Large swap should be less efficient due to price impact at each hop
-        assertGt(
-            smallEfficiency,
-            largeEfficiency,
-            "Large swap should have worse efficiency"
-        );
+        assertGt(smallEfficiency, largeEfficiency, "Large swap should have worse efficiency");
 
         // Execute large swap
-        router.swapExactTokensForTokens(
-            largeAmount,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
+        router.swapExactTokensForTokens(largeAmount, 0, path, address(this), block.timestamp);
     }
 
     // ============ GAS TEST FOR MULTI-HOP ============
 
-    function test_MultiHop_GasUsage() public {
-        _createBalancedPools();
-
-        uint256 amountIn = 1000 * 10 ** 18;
-
-        // 2-hop gas
-        address[] memory path2 = new address[](2);
-        path2[0] = address(tokenA);
-        path2[1] = address(tokenB);
-
-        uint256 gas2Start = gasleft();
-        router.swapExactTokensForTokens(
-            amountIn,
-            0,
-            path2,
-            address(this),
-            block.timestamp
-        );
-        uint256 gas2Used = gas2Start - gasleft();
-
-        // 3-hop gas
-        address[] memory path3 = new address[](3);
-        path3[0] = address(tokenB);
-        path3[1] = address(tokenC);
-        path3[2] = address(tokenD);
-
-        uint256 gas3Start = gasleft();
-        router.swapExactTokensForTokens(
-            amountIn / 2,
-            0,
-            path3,
-            address(this),
-            block.timestamp
-        );
-        uint256 gas3Used = gas3Start - gasleft();
-
-        emit log_named_uint("Gas for 2-hop swap", gas2Used);
-        emit log_named_uint("Gas for 3-hop swap", gas3Used);
-
-        // 3-hop should use more gas
-        assertGt(gas3Used, gas2Used, "More hops should use more gas");
-    }
+    // NOTE: the old 2-hop-vs-3-hop gas-order assertion was removed during
+    // test triage (T-02): gas ordering is not a security property, and the
+    // comparison is brittle across toolchains. Gas is tracked in
+    // `.gas-snapshot` instead.
 }
